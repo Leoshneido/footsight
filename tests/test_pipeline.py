@@ -35,3 +35,18 @@ def test_run_raises_when_calibration_fails(mock_compute_homography):
             "still.jpg", "mockup.png",
             detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
         )
+
+
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_with_no_players_renders_empty_pitch(mock_compute_homography, mock_detect_players, mock_render_pitch):
+    mock_compute_homography.return_value = np.eye(3)
+    mock_detect_players.return_value = []
+
+    pipeline.run(
+        "still.jpg", "mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+    )
+
+    mock_render_pitch.assert_called_once_with([], "mockup.png")
