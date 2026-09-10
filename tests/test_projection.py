@@ -45,3 +45,27 @@ def test_filter_to_pitch_discards_points_outside_margin():
     points = [(0.0, 0.0), (200.0, 0.0), (0.0, -100.0)]
     result = filter_to_pitch(points, pitch_length=105.0, pitch_width=68.0, margin=5.0)
     assert result == [(0.0, 0.0)]
+
+
+def test_project_points_filters_points_across_the_horizon():
+    # Bottom row [0, 1, -50] gives w = y - 50: a horizon at y=50.
+    # The pitch-center world point (0,0) maps back to image pixel (0,0),
+    # whose w is -50 (negative) -- so points with w<0 (y<50) are kept,
+    # and points with w>0 (y>=50) are on the wrong side and dropped.
+    H = np.array([
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 1.0, -50.0],
+    ])
+    points = [(10.0, 0.0), (10.0, 100.0)]
+    result = project_points(H, points)
+    assert len(result) == 1
+    assert result[0] == pytest.approx((-0.2, 0.0))
+
+
+def test_project_points_keeps_all_points_for_identity_homography():
+    # Regression check: a homography with a constant-sign bottom row
+    # (e.g. identity) must not filter out any legitimate point.
+    H = np.eye(3)
+    points = [(1.0, 2.0), (-500.0, 300.0), (0.0, 0.0)]
+    assert project_points(H, points) == points

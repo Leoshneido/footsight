@@ -11,7 +11,25 @@ def project_point(H: np.ndarray, point: tuple[float, float]) -> tuple[float, flo
 
 
 def project_points(H: np.ndarray, points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    return [project_point(H, p) for p in points]
+    """Project each point, discarding any on the wrong side of the homography's horizon.
+
+    The pitch center (world (0,0)) is always a valid on-pitch point by
+    construction. Its corresponding image pixel is used as a reference: any
+    input point whose homogeneous sign disagrees with the reference's would
+    otherwise divide through to a mirrored-but-plausible-looking position
+    (e.g. a spectator detected above the pitch's vanishing line).
+    """
+    center_pixel = np.linalg.inv(H) @ np.array([0.0, 0.0, 1.0])
+    ref_x, ref_y = center_pixel[0] / center_pixel[2], center_pixel[1] / center_pixel[2]
+    ref_w = H[2, 0] * ref_x + H[2, 1] * ref_y + H[2, 2]
+
+    result = []
+    for x, y in points:
+        w = H[2, 0] * x + H[2, 1] * y + H[2, 2]
+        if w == 0 or (w > 0) != (ref_w > 0):
+            continue
+        result.append(project_point(H, (x, y)))
+    return result
 
 
 def bbox_to_ground_point(bbox: tuple[float, float, float, float]) -> tuple[float, float]:

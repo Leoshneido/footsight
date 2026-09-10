@@ -37,8 +37,11 @@ def compute_homography(
         env={**os.environ, "PYTHONPATH": str(PNLCALIB_VENDOR_DIR)},
         capture_output=True,
         text=True,
-        check=True,
     )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"pnlcalib_infer.py failed (exit {result.returncode}):\n{result.stderr}"
+        )
     data = json.loads(result.stdout)
     if data["homography"] is None:
         return None
