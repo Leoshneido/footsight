@@ -7,3 +7,5 @@ scipy
 pyyaml
 tqdm
 pytest
+matplotlib
+shapely
