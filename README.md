@@ -6,6 +6,7 @@ Turn a football (soccer) broadcast still into a 2D top-down pitch mockup.
 
     git submodule update --init --recursive
     pip install -r requirements.txt
+    mkdir -p weights/pnlcalib
     curl -L -o weights/pnlcalib/SV_kp https://github.com/mguti97/PnLCalib/releases/download/v1.0.0/SV_kp
     curl -L -o weights/pnlcalib/SV_lines https://github.com/mguti97/PnLCalib/releases/download/v1.0.0/SV_lines
 
