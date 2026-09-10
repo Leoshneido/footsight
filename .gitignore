@@ -6,3 +6,5 @@ weights/
 stills/
 out/
 *.DS_Store
+*.egg-info/
+.pytest_cache/

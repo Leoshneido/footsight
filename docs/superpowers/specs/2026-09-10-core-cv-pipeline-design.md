@@ -42,13 +42,19 @@ is built on top of it.
 
 A Python CLI script, not a service. Five independently testable modules:
 
-- **`pitch_calibration`** — runs a pretrained pitch-keypoint model on the
-  still, finds line-intersection points, computes a homography matrix
-  mapping image pixels → real-world pitch coordinates (standard 105×68m
-  pitch). Specific pretrained model to be pinned down during implementation
-  and verified against sample stills before committing to it.
-- **`player_detection`** — runs pretrained YOLOv8/v11 (Ultralytics), filtered
-  to the "person" class, returns bounding boxes. No training required.
+- **`pitch_calibration`** — runs [PnLCalib](https://github.com/mguti97/PnLCalib)
+  (pretrained single-view keypoint + line detection, SV_kp/SV_lines weights)
+  on the still to compute a homography matrix mapping image pixels →
+  real-world pitch coordinates (standard 105×68m pitch). PnLCalib is
+  GPL-2.0 licensed, so it is vendored as a git submodule and run only as an
+  isolated subprocess (a small glue script shells out to it and returns a
+  JSON-encoded homography) — never imported in-process, so footsight's own
+  code isn't bound by GPL-2.0 on distribution. See `MEMORY.md`, 2026-09-10.
+- **`player_detection`** — runs torchvision's pretrained `fasterrcnn_resnet50_fpn`
+  (COCO weights), filtered to the "person" label, returns bounding boxes. No
+  training required. Imported in-process — torchvision's detection models are
+  BSD-3-Clause, unlike Ultralytics YOLO (AGPL-3.0), so no subprocess isolation
+  is needed here. See `MEMORY.md`, 2026-09-10.
 - **`projection`** — takes each player's bounding box, uses the bottom-center
   point (the ground-contact point — a person's feet, not head/box-center,
   sit on the pitch plane) and applies the homography matrix to get real-world
@@ -59,9 +65,9 @@ A Python CLI script, not a service. Five independently testable modules:
 - **`pipeline`** (entry point) — wires the above together: image in →
   calibrate → detect → project → render → image out.
 
-Dependencies: OpenCV (`cv2.findHomography`, image I/O), `ultralytics` for
-YOLO, a pretrained pitch-keypoint model (TBD, see above), Pillow/matplotlib
-for rendering output.
+Dependencies: OpenCV (image I/O), `torch`/`torchvision` (player detection,
+and shared with the PnLCalib subprocess environment), `scipy`/`pyyaml`/`tqdm`
+(PnLCalib subprocess requirements), Pillow for rendering output.
 
 ## Data flow
 
