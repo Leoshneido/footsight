@@ -8,13 +8,15 @@ from footsight import pipeline
 
 @patch("footsight.pipeline.render.render_pitch")
 @patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
 @patch("footsight.pipeline.player_detection.detect_players")
 @patch("footsight.pipeline.pitch_calibration.compute_homography")
 def test_run_wires_stages_together(
-    mock_compute_homography, mock_detect_players, mock_detect_ball, mock_render_pitch
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch
 ):
     mock_compute_homography.return_value = np.eye(3)
     mock_detect_players.return_value = [(0.0, 0.0, 10.0, 20.0)]
+    mock_classify_players.return_value = ["team_a"]
     mock_detect_ball.return_value = None
 
     pipeline.run(
@@ -24,23 +26,48 @@ def test_run_wires_stages_together(
 
     mock_compute_homography.assert_called_once_with("still.jpg", "kp.pt", "lines.pt")
     mock_detect_players.assert_called_once_with("still.jpg", "fake-model")
+    mock_classify_players.assert_called_once_with("still.jpg", [(0.0, 0.0, 10.0, 20.0)])
     mock_detect_ball.assert_called_once_with("still.jpg", [(0.0, 0.0, 10.0, 20.0)])
     mock_render_pitch.assert_called_once()
     rendered_points, output_path = mock_render_pitch.call_args[0]
     assert output_path == "mockup.png"
-    assert rendered_points == [(5.0, 20.0)]
+    assert rendered_points == [((5.0, 20.0), "team_a")]
     assert mock_render_pitch.call_args[1] == {"ball_position": None}
 
 
 @patch("footsight.pipeline.render.render_pitch")
 @patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_labels_officials_as_referee_category(
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch
+):
+    mock_compute_homography.return_value = np.eye(3)
+    mock_detect_players.return_value = [(0.0, 0.0, 10.0, 20.0), (30.0, 0.0, 40.0, 20.0)]
+    mock_classify_players.return_value = ["team_b", "officials"]
+    mock_detect_ball.return_value = None
+
+    pipeline.run(
+        "still.jpg", "mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+    )
+
+    rendered_points, _ = mock_render_pitch.call_args[0]
+    assert rendered_points == [((5.0, 20.0), "team_b"), ((35.0, 20.0), "referee")]
+
+
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
 @patch("footsight.pipeline.player_detection.detect_players")
 @patch("footsight.pipeline.pitch_calibration.compute_homography")
 def test_run_includes_ball_position_when_ball_detected(
-    mock_compute_homography, mock_detect_players, mock_detect_ball, mock_render_pitch
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch
 ):
     mock_compute_homography.return_value = np.eye(3)
     mock_detect_players.return_value = []
+    mock_classify_players.return_value = []
     mock_detect_ball.return_value = (10.0, 10.0, 20.0, 20.0)  # center = (15.0, 15.0)
 
     pipeline.run(
@@ -64,13 +91,15 @@ def test_run_raises_when_calibration_fails(mock_compute_homography):
 
 @patch("footsight.pipeline.render.render_pitch")
 @patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
 @patch("footsight.pipeline.player_detection.detect_players")
 @patch("footsight.pipeline.pitch_calibration.compute_homography")
 def test_run_with_no_players_renders_empty_pitch(
-    mock_compute_homography, mock_detect_players, mock_detect_ball, mock_render_pitch
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch
 ):
     mock_compute_homography.return_value = np.eye(3)
     mock_detect_players.return_value = []
+    mock_classify_players.return_value = []
     mock_detect_ball.return_value = None
 
     pipeline.run(

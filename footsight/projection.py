@@ -10,8 +10,9 @@ def project_point(H: np.ndarray, point: tuple[float, float]) -> tuple[float, flo
     return float(result[0]), float(result[1])
 
 
-def project_points(H: np.ndarray, points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """Project each point, discarding any on the wrong side of the homography's horizon.
+def _project_points_with_index(H: np.ndarray, points: list[tuple[float, float]]):
+    """Yield (original_index, projected_point) for each point that lands on
+    the same side of the homography's horizon as the pitch center.
 
     The pitch center (world (0,0)) is always a valid on-pitch point by
     construction. Its corresponding image pixel is used as a reference: any
@@ -23,13 +24,26 @@ def project_points(H: np.ndarray, points: list[tuple[float, float]]) -> list[tup
     ref_x, ref_y = center_pixel[0] / center_pixel[2], center_pixel[1] / center_pixel[2]
     ref_w = H[2, 0] * ref_x + H[2, 1] * ref_y + H[2, 2]
 
-    result = []
-    for x, y in points:
+    for i, (x, y) in enumerate(points):
         w = H[2, 0] * x + H[2, 1] * y + H[2, 2]
         if w == 0 or (w > 0) != (ref_w > 0):
             continue
-        result.append(project_point(H, (x, y)))
-    return result
+        yield i, project_point(H, (x, y))
+
+
+def project_points(H: np.ndarray, points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Project each point, discarding any on the wrong side of the homography's horizon."""
+    return [point for _, point in _project_points_with_index(H, points)]
+
+
+def project_points_indexed(
+    H: np.ndarray, points: list[tuple[float, float]]
+) -> list[tuple[int, tuple[float, float]]]:
+    """Like project_points, but keeps each surviving point paired with its
+    original index in `points` -- needed when other per-point data (e.g. a
+    team/referee label) must stay aligned with points that survive the
+    horizon filter."""
+    return list(_project_points_with_index(H, points))
 
 
 def bbox_to_ground_point(bbox: tuple[float, float, float, float]) -> tuple[float, float]:

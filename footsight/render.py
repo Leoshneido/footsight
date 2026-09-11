@@ -2,9 +2,20 @@ from PIL import Image, ImageDraw
 
 PITCH_COLOR = (34, 139, 34)
 LINE_COLOR = (255, 255, 255)
-PLAYER_COLOR = (220, 20, 60)
 BALL_FILL_COLOR = (255, 255, 255)
 BALL_OUTLINE_COLOR = (0, 0, 0)
+
+TEAM_A_COLOR = (30, 100, 220)
+TEAM_B_COLOR = (220, 20, 60)
+REFEREE_COLOR = (255, 215, 0)
+ASSISTANT_REFEREE_COLOR = (150, 150, 90)
+
+CATEGORY_COLORS = {
+    "team_a": TEAM_A_COLOR,
+    "team_b": TEAM_B_COLOR,
+    "referee": REFEREE_COLOR,
+    "assistant_referee": ASSISTANT_REFEREE_COLOR,
+}
 
 
 def pitch_to_image_coords(
@@ -22,7 +33,7 @@ def pitch_to_image_coords(
 
 
 def render_pitch(
-    player_positions: list[tuple[float, float]],
+    player_positions: list[tuple[tuple[float, float], str]],
     output_path: str,
     ball_position: tuple[float, float] | None = None,
     pitch_length: float = 105.0,
@@ -50,11 +61,11 @@ def render_pitch(
     halfway_bottom = pitch_to_image_coords((0.0, pitch_width / 2), pitch_length, pitch_width, image_width_px, margin_px)
     draw.line([halfway_top, halfway_bottom], fill=LINE_COLOR, width=2)
 
-    for position in player_positions:
+    for position, category in player_positions:
         px, py = pitch_to_image_coords(position, pitch_length, pitch_width, image_width_px, margin_px)
         draw.ellipse(
             [px - dot_radius_px, py - dot_radius_px, px + dot_radius_px, py + dot_radius_px],
-            fill=PLAYER_COLOR,
+            fill=CATEGORY_COLORS[category],
         )
 
     if ball_position is not None:

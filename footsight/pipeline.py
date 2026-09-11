@@ -1,6 +1,6 @@
 import argparse
 
-from footsight import ball_detection, pitch_calibration, player_detection, projection, render
+from footsight import ball_detection, pitch_calibration, player_detection, projection, render, team_classification
 
 
 def run(
@@ -15,9 +15,18 @@ def run(
         raise RuntimeError(f"Could not calibrate pitch from {input_path}")
 
     boxes = player_detection.detect_players(input_path, detection_model)
+    labels = team_classification.classify_players(input_path, boxes)
+
     ground_points = [projection.bbox_to_ground_point(box) for box in boxes]
-    pitch_points = projection.project_points(homography, ground_points)
-    pitch_points = projection.filter_to_pitch(pitch_points)
+    projected_indexed = projection.project_points_indexed(homography, ground_points)
+
+    player_positions = []
+    for index, point in projected_indexed:
+        if not projection.filter_to_pitch([point]):
+            continue
+        label = labels[index]
+        category = "referee" if label == team_classification.OFFICIALS_LABEL else label
+        player_positions.append((point, category))
 
     ball_position = None
     ball_box = ball_detection.find_ball(input_path, boxes)
@@ -27,7 +36,7 @@ def run(
         if projected_ball:
             ball_position = projected_ball[0]
 
-    render.render_pitch(pitch_points, output_path, ball_position=ball_position)
+    render.render_pitch(player_positions, output_path, ball_position=ball_position)
 
 
 def main() -> None:

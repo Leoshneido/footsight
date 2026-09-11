@@ -4,6 +4,7 @@ import pytest
 from footsight.projection import (
     project_point,
     project_points,
+    project_points_indexed,
     bbox_to_ground_point,
     bbox_to_center_point,
     filter_to_pitch,
@@ -75,3 +76,26 @@ def test_project_points_keeps_all_points_for_identity_homography():
     H = np.eye(3)
     points = [(1.0, 2.0), (-500.0, 300.0), (0.0, 0.0)]
     assert project_points(H, points) == points
+
+
+def test_project_points_indexed_preserves_original_index_of_survivors():
+    # Same horizon as test_project_points_filters_points_across_the_horizon:
+    # only the first point (index 0) survives.
+    H = np.array([
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 1.0, -50.0],
+    ])
+    points = [(10.0, 0.0), (10.0, 100.0)]
+    result = project_points_indexed(H, points)
+    assert len(result) == 1
+    index, point = result[0]
+    assert index == 0
+    assert point == pytest.approx((-0.2, 0.0))
+
+
+def test_project_points_indexed_matches_project_points_when_nothing_filtered():
+    H = np.eye(3)
+    points = [(1.0, 2.0), (3.0, 4.0)]
+    result = project_points_indexed(H, points)
+    assert result == [(0, (1.0, 2.0)), (1, (3.0, 4.0))]
