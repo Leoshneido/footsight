@@ -1,6 +1,6 @@
 import argparse
 
-from footsight import pitch_calibration, player_detection, projection, render
+from footsight import ball_detection, pitch_calibration, player_detection, projection, render
 
 
 def run(
@@ -19,7 +19,15 @@ def run(
     pitch_points = projection.project_points(homography, ground_points)
     pitch_points = projection.filter_to_pitch(pitch_points)
 
-    render.render_pitch(pitch_points, output_path)
+    ball_position = None
+    ball_box = ball_detection.find_ball(input_path, boxes)
+    if ball_box is not None:
+        ball_center = projection.bbox_to_center_point(ball_box)
+        projected_ball = projection.filter_to_pitch(projection.project_points(homography, [ball_center]))
+        if projected_ball:
+            ball_position = projected_ball[0]
+
+    render.render_pitch(pitch_points, output_path, ball_position=ball_position)
 
 
 def main() -> None:

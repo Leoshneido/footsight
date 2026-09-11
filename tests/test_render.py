@@ -30,3 +30,19 @@ def test_render_pitch_with_no_players_still_creates_pitch(tmp_path):
     output_path = tmp_path / "empty.png"
     render_pitch([], str(output_path))
     assert output_path.exists()
+
+
+def test_render_pitch_draws_ball_at_expected_pixel(tmp_path):
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path), ball_position=(0.0, 0.0), image_width_px=1050, margin_px=40, ball_radius_px=6)
+
+    image = Image.open(output_path)
+    center_px, center_py = pitch_to_image_coords((0.0, 0.0), image_width_px=1050, margin_px=40)
+    pixel = image.getpixel((int(center_px), int(center_py)))
+    assert pixel == (255, 255, 255)
+
+
+def test_render_pitch_with_no_ball_position_omits_ball(tmp_path):
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path), ball_position=None)
+    assert output_path.exists()

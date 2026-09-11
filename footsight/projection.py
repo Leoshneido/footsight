@@ -38,6 +38,13 @@ def bbox_to_ground_point(bbox: tuple[float, float, float, float]) -> tuple[float
     return ((x1 + x2) / 2.0, y2)
 
 
+def bbox_to_center_point(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
+    """Center of a bounding box (x1, y1, x2, y2) -- the ball's true position, unlike a
+    player's, is its center rather than a ground-contact point."""
+    x1, y1, x2, y2 = bbox
+    return ((x1 + x2) / 2.0, (y1 + y2) / 2.0)
+
+
 def filter_to_pitch(
     points: list[tuple[float, float]],
     pitch_length: float = 105.0,

@@ -5,6 +5,7 @@ from footsight.projection import (
     project_point,
     project_points,
     bbox_to_ground_point,
+    bbox_to_center_point,
     filter_to_pitch,
 )
 
@@ -33,6 +34,11 @@ def test_project_points_applies_to_all():
 def test_bbox_to_ground_point_uses_bottom_center():
     bbox = (10.0, 20.0, 30.0, 50.0)
     assert bbox_to_ground_point(bbox) == (20.0, 50.0)
+
+
+def test_bbox_to_center_point_uses_box_center():
+    bbox = (10.0, 20.0, 30.0, 60.0)
+    assert bbox_to_center_point(bbox) == (20.0, 40.0)
 
 
 def test_filter_to_pitch_keeps_points_within_margin():

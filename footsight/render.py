@@ -3,6 +3,8 @@ from PIL import Image, ImageDraw
 PITCH_COLOR = (34, 139, 34)
 LINE_COLOR = (255, 255, 255)
 PLAYER_COLOR = (220, 20, 60)
+BALL_FILL_COLOR = (255, 255, 255)
+BALL_OUTLINE_COLOR = (0, 0, 0)
 
 
 def pitch_to_image_coords(
@@ -22,11 +24,13 @@ def pitch_to_image_coords(
 def render_pitch(
     player_positions: list[tuple[float, float]],
     output_path: str,
+    ball_position: tuple[float, float] | None = None,
     pitch_length: float = 105.0,
     pitch_width: float = 68.0,
     image_width_px: int = 1050,
     margin_px: int = 40,
     dot_radius_px: int = 8,
+    ball_radius_px: int = 6,
 ) -> None:
     scale = (image_width_px - 2 * margin_px) / pitch_length
     image_height_px = int(pitch_width * scale) + 2 * margin_px
@@ -51,6 +55,15 @@ def render_pitch(
         draw.ellipse(
             [px - dot_radius_px, py - dot_radius_px, px + dot_radius_px, py + dot_radius_px],
             fill=PLAYER_COLOR,
+        )
+
+    if ball_position is not None:
+        px, py = pitch_to_image_coords(ball_position, pitch_length, pitch_width, image_width_px, margin_px)
+        draw.ellipse(
+            [px - ball_radius_px, py - ball_radius_px, px + ball_radius_px, py + ball_radius_px],
+            fill=BALL_FILL_COLOR,
+            outline=BALL_OUTLINE_COLOR,
+            width=2,
         )
 
     image.save(output_path)
