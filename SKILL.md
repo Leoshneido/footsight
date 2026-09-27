@@ -72,6 +72,15 @@ striped teams spread widely on the circle.
 - Generic detectors (COCO) miss the ~12 px ball; a learned ball model flags spare balls by the touchline. Classical detection + manual fallback is the standing choice.
 - Before changing a jersey feature, inspect per-player hue histograms -- that is what exposed the 50/50 striped-kit split.
 
+## Overlay editor
+
+- `python -m footsight.edit <folder-or-camera.png> [--port 8765] [--no-browser]`: `edit.py` is a stdlib `ThreadingHTTPServer` on 127.0.0.1 only. It serves `footsight/editor/` (index.html, editor.css, editor.js, geometry.js), the Kanit font from `~/Library/Fonts`, and per still `/api/stills/<id>/scene|background|figures|overlays`. POST overlays are validated; POST export must be a PNG of at most 50 MB.
+- The camera view now writes layers for it: `<out>_camera_background.png` (stadium, pitch, boards, goals), `<out>_camera_figures.png` (transparent: shadows, players, ball) and `<out>_camera_scene.json`. The scene holds players (id, category, shirt, shorts, `feet`/`box` in camera-view px, `feet_m`), `image_to_pitch`, `pitch_to_image` and the ball. The full image is background composited with figures.
+- `render.paste_over` composites tiles correctly onto RGBA layers; all figure drawing goes through it.
+- SVG stack: background, ground graphics, preview, figures, spotlight veil, tags. Graphics are stored in pitch metres and player ids (overlay format v1: ring, tag, arrow run/pass, link, line, zone, plus a spotlight flag) and projected with `geometry.js`, which is pure and tested with `node --test` (Node 25; `footsight/editor/package.json` marks it as an ES module).
+- Export: SVG layers are rasterized to a canvas; tags are drawn with the canvas text API, because an SVG drawn as an image can't use the page's fonts.
+- Checked by headless Chrome screenshot (all overlay types render under the players, no console errors). Drawing with the mouse and the keys are checked by hand.
+
 ## Brand assets
 
 - Logo: `scripts/make_logo.py` -> `assets/logo/` (`footsight_logo.png` transparent, `footsight_logo_board.png` on navy, `footsight_ball.png`). "FOOTSiGHT", Kanit Black Italic (SIL OFL 1.1, read from `~/Library/Fonts`, not vendored), football at the font's own i-dot position, 1.875x the dot.

@@ -184,6 +184,22 @@ def vivid_kit_color(color: tuple[int, int, int]) -> tuple[int, int, int]:
     return (int(round(red * 255)), int(round(green * 255)), int(round(blue * 255)))
 
 
+def paste_over(target: Image.Image, tile: Image.Image, xy: tuple[int, int]) -> None:
+    """Draw an RGBA tile over target at xy. On an RGB image this is a
+    masked paste; on an RGBA layer (the camera view's transparent figures
+    layer) it is a proper "over" composite, so soft edges keep their color
+    and coverage instead of being blended with transparent black."""
+    if target.mode != "RGBA":
+        target.paste(tile, xy, tile)
+        return
+    x, y = xy
+    left, top = max(0, x), max(0, y)
+    right, bottom = min(target.width, x + tile.width), min(target.height, y + tile.height)
+    if right <= left or bottom <= top:
+        return
+    target.alpha_composite(tile.crop((left - x, top - y, right - x, bottom - y)), (left, top))
+
+
 def category_kit(category, kit_colors):
     """(shirt, shorts) to draw a category in: its detected kit, saturation
     boosted, or the fixed palette shirt with dark shorts."""
@@ -241,7 +257,7 @@ def draw_player_icon(image, position_px, shirt, shorts, unit_px):
     small = tile.resize((tile_size // SUPERSAMPLE, tile_size // SUPERSAMPLE), Image.BOX)
     px, py = position_px
     feet_above_center = int(round(ICON_FEET_UNITS * unit_px))
-    image.paste(small, (int(round(px)) - tile_half_px, int(round(py)) - tile_half_px - feet_above_center), small)
+    paste_over(image, small, (int(round(px)) - tile_half_px, int(round(py)) - tile_half_px - feet_above_center))
 
 
 def grass_image(image_width_px, image_height_px, margin_px, scale):
@@ -311,7 +327,7 @@ def draw_ball(image, position_px, radius_px):
     )
     small = tile.resize((half * 2, half * 2), Image.BOX)
     px, py = position_px
-    image.paste(small, (int(round(px)) - half, int(round(py)) - half), small)
+    paste_over(image, small, (int(round(px)) - half, int(round(py)) - half))
 
 
 def render_pitch(

@@ -195,3 +195,76 @@ def test_goal_frames_skip_goals_that_are_out_of_frame():
     Hz = np.linalg.inv(cv2.getPerspectiveTransform(PITCH_CORNERS, zoomed).astype(float))
 
     assert goal_frames(Hz, STILL_W, STILL_H) == []
+
+
+SHIRT = (245, 130, 30)
+
+
+def _render_with_layers(still, tmp_path, people, ball=None):
+    out = tmp_path / "out_camera.png"
+    render_camera_view(still, H, people, ball, str(out))
+    return out, camera_view.layer_paths(str(out))
+
+
+def test_layer_paths_sit_next_to_the_camera_view():
+    assert camera_view.layer_paths("x/out_camera.png") == {
+        "background": "x/out_camera_background.png",
+        "figures": "x/out_camera_figures.png",
+        "scene": "x/out_camera_scene.json",
+    }
+
+
+def test_background_layer_has_no_players_and_figures_layer_has_only_players(still, tmp_path):
+    """The editor draws ground graphics between these two layers, so the
+    graphics sit on the grass under the players."""
+    out, layers = _render_with_layers(still, tmp_path, [_person((290, 200, 310, 260))])
+    torso = (450, 335)  # the standing figure's shirt, in 1.5x pixels
+
+    full = Image.open(out).convert("RGB")
+    background = Image.open(layers["background"]).convert("RGB")
+    figures = Image.open(layers["figures"])
+    assert full.getpixel(torso) == SHIRT
+    assert background.getpixel(torso) != SHIRT
+    assert figures.mode == "RGBA" and figures.getpixel((100, 500))[3] == 0  # bare grass
+
+
+def test_background_plus_figures_is_the_full_camera_view(still, tmp_path):
+    out, layers = _render_with_layers(still, tmp_path, [_person((290, 200, 310, 260))], ball=(300.0, 250.0))
+
+    stacked = Image.open(layers["background"]).convert("RGBA")
+    stacked.alpha_composite(Image.open(layers["figures"]).convert("RGBA"))
+    assert stacked.convert("RGB").tobytes() == Image.open(out).convert("RGB").tobytes()
+
+
+def test_scene_file_describes_players_and_camera(still, tmp_path):
+    import json
+
+    people = [_person((290, 200, 310, 260)), _person((100, 300, 120, 390), category="goalkeeper")]
+    _, layers = _render_with_layers(still, tmp_path, people)
+    scene = json.loads(open(layers["scene"]).read())
+
+    assert scene["version"] == 1
+    assert scene["image"] == {"width": 900, "height": 600,
+                              "background": "out_camera_background.png", "figures": "out_camera_figures.png"}
+    assert scene["pitch"] == {"length": 105.0, "width": 68.0}
+    to_pitch, to_image = np.array(scene["image_to_pitch"]), np.array(scene["pitch_to_image"])
+    product = to_pitch @ to_image
+    assert product / product[2, 2] == pytest.approx(np.eye(3), abs=1e-9)
+    assert [p["id"] for p in scene["players"]] == [0, 1]
+    first = scene["players"][0]
+    assert first["category"] == "team_a" and first["shirt"] == [245, 130, 30] and first["shorts"] == [240, 240, 240]
+    assert first["feet"] == pytest.approx([450.0, 390.0])
+    assert first["box"] == pytest.approx([435.0, 300.0, 465.0, 390.0])
+    assert first["feet_m"] == pytest.approx(list(_to_pitch(scaled_homography(H, 1.5), (450.0, 390.0))))
+    assert scene["players"][1]["category"] == "goalkeeper"
+    assert scene["ball"] is None
+
+
+def test_scene_file_records_the_ball(still, tmp_path):
+    import json
+
+    _, layers = _render_with_layers(still, tmp_path, [], ball=(300.0, 250.0))
+    ball = json.loads(open(layers["scene"]).read())["ball"]
+
+    assert ball["pixel"] == pytest.approx([450.0, 375.0])
+    assert ball["m"] == pytest.approx(list(_to_pitch(scaled_homography(H, 1.5), (450.0, 375.0))))

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>footsight editor</title>
+  <link rel="stylesheet" href="/editor/editor.css">
+</head>
+<body>
+  <header id="toolbar" aria-label="Tools">
+    <span class="brand">FOOTS<span class="i">i</span>GHT</span>
+    <nav id="tools">
+      <button data-tool="highlight" title="Highlight (H)">Highlight <kbd>H</kbd></button>
+      <button data-tool="tag" title="Tag (T)">Tag <kbd>T</kbd></button>
+      <button data-tool="run" title="Run arrow (A)">Run <kbd>A</kbd></button>
+      <button data-tool="pass" title="Pass arrow (P)">Pass <kbd>P</kbd></button>
+      <button data-tool="link" title="Link players (K)">Link <kbd>K</kbd></button>
+      <button data-tool="line" title="Line (L) — Shift: across the pitch, Alt: dashed">Line <kbd>L</kbd></button>
+      <button data-tool="zone" title="Zone (Z)">Zone <kbd>Z</kbd></button>
+      <button data-action="spotlight" title="Spotlight (S)">Spotlight <kbd>S</kbd></button>
+    </nav>
+    <nav id="colors">
+      <button data-color="yellow" title="Yellow (1)"></button>
+      <button data-color="cyan" title="Cyan (2)"></button>
+      <button data-color="white" title="White (3)"></button>
+      <button data-color="red" title="Red (4)"></button>
+    </nav>
+    <nav id="actions">
+      <button data-action="undo" title="Undo (Cmd/Ctrl+Z)">Undo</button>
+      <button data-action="clear" title="Clear (C)">Clear <kbd>C</kbd></button>
+      <button data-action="prev" title="Previous still (←)">←</button>
+      <span id="still-name"></span>
+      <button data-action="next" title="Next still (→)">→</button>
+      <button data-action="save" title="Save overlays (Cmd/Ctrl+S)">Save</button>
+      <button data-action="export" title="Export PNG (E)">Export <kbd>E</kbd></button>
+      <button data-action="fullscreen" title="Full screen (F)">Full screen <kbd>F</kbd></button>
+      <button data-action="help" title="Keys (?)">?</button>
+    </nav>
+  </header>
+
+  <main id="stage-wrap">
+    <svg id="stage" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="Camera view">
+      <defs>
+        <filter id="glow" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"></feGaussianBlur>
+          <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+        </filter>
+        <mask id="spot-mask" maskUnits="userSpaceOnUse">
+          <rect id="spot-mask-bg" x="0" y="0" fill="white"></rect>
+          <g id="spot-holes"></g>
+        </mask>
+        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="18"></feGaussianBlur>
+        </filter>
+      </defs>
+      <image id="background"></image>
+      <g id="ground" filter="url(#glow)"></g>
+      <g id="preview" filter="url(#glow)"></g>
+      <image id="figures"></image>
+      <rect id="veil" x="0" y="0" fill="black" fill-opacity="0.55" mask="url(#spot-mask)" visibility="hidden"></rect>
+      <g id="tags"></g>
+    </svg>
+    <input id="tag-input" type="text" maxlength="24" placeholder="Name or number" hidden>
+  </main>
+
+  <div id="notice" role="status" aria-live="polite"></div>
+
+  <aside id="help" hidden>
+    <h2>Keys</h2>
+    <dl>
+      <dt>H</dt><dd>Highlight a player (click again to remove)</dd>
+      <dt>T</dt><dd>Tag a player, type, Enter</dd>
+      <dt>A / P</dt><dd>Drag a run / pass arrow</dd>
+      <dt>K</dt><dd>Click players to link, Enter to finish</dd>
+      <dt>L</dt><dd>Drag a line — Shift: across the pitch, Alt: dashed</dd>
+      <dt>Z</dt><dd>Click points for a zone, Enter to close</dd>
+      <dt>S</dt><dd>Spotlight the highlighted players</dd>
+      <dt>1–4</dt><dd>Yellow, cyan, white, red</dd>
+      <dt>⌘Z / ⇧⌘Z</dt><dd>Undo / redo</dd>
+      <dt>C</dt><dd>Clear this still</dd>
+      <dt>Esc</dt><dd>Cancel the shape in progress</dd>
+      <dt>← / →</dt><dd>Previous / next still</dd>
+      <dt>F</dt><dd>Full screen</dd>
+      <dt>E / ⌘S</dt><dd>Export PNG / save overlays</dd>
+    </dl>
+  </aside>
+
+  <script type="module" src="/editor/editor.js"></script>
+</body>
+</html>

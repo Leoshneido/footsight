@@ -9,6 +9,7 @@ detected, posed like the real ones when their pose can be trusted.
 Layers, back to front: crowd, ground, far-side ad boards, goals, then
 shadows, players and ball sorted far to near.
 """
+import json
 from pathlib import Path
 
 import cv2
@@ -72,6 +73,18 @@ ICON_BOX_FACTOR = 1.05
 # 0.3 m read as a third of a player's height near the camera.
 BALL_RADIUS_M = 0.16
 MIN_BALL_RADIUS_PX = 4.0
+
+
+def layer_paths(output_path: str) -> dict[str, str]:
+    """Where the editor's inputs go, next to the camera view: the background
+    (stadium, pitch, boards, goals), the transparent figures layer and the
+    scene file."""
+    path = Path(output_path)
+    return {
+        "background": str(path.with_name(f"{path.stem}_background{path.suffix}")),
+        "figures": str(path.with_name(f"{path.stem}_figures{path.suffix}")),
+        "scene": str(path.with_name(f"{path.stem}_scene.json")),
+    }
 
 
 def scaled_homography(homography: np.ndarray, scale: float) -> np.ndarray:
@@ -329,6 +342,9 @@ def render_camera_view(
 
     _draw_boards(image, far_board_segments(H, width, height), vertical)
     _draw_goals(image, goal_frames(H, width, height), vertical)
+    background = image
+    figures = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    image = figures  # everything below is drawn onto the transparent figures layer
 
     drawables = [(box[3], "person", item) for item in scaled for box in [item[0]]]
     if ball_pixel is not None:
@@ -345,4 +361,46 @@ def render_camera_view(
         else:
             draw_player_icon(image, ((x1 + x2) / 2, y2), shirt, shorts, (y2 - y1) * ICON_BOX_FACTOR / ICON_HEIGHT_UNITS)
 
-    image.save(output_path)
+    layers = layer_paths(output_path)
+    full = background.convert("RGBA")
+    full.alpha_composite(figures)
+    full.convert("RGB").save(output_path)
+    background.save(layers["background"])
+    figures.save(layers["figures"])
+    _write_scene(layers, width, height, H, scaled, people, ball_pixel, scale)
+
+
+def _write_scene(layers, width, height, H, scaled, people, ball_pixel, scale) -> None:
+    """The scene file the overlay editor reads: players (camera-view pixels
+    and pitch metres) and the camera geometry both ways."""
+    players = []
+    for index, ((box, shirt, shorts, _), (_, category, _, _)) in enumerate(zip(scaled, people)):
+        feet = ((box[0] + box[2]) / 2, box[3])
+        players.append({
+            "id": index,
+            "category": category,
+            "shirt": [int(c) for c in shirt],
+            "shorts": [int(c) for c in shorts],
+            "feet": [float(feet[0]), float(feet[1])],
+            "feet_m": [float(v) for v in _apply(H, feet)],
+            "box": [float(v) for v in box],
+        })
+    ball = None
+    if ball_pixel is not None:
+        pixel = (ball_pixel[0] * scale, ball_pixel[1] * scale)
+        ball = {"pixel": [float(pixel[0]), float(pixel[1])], "m": [float(v) for v in _apply(H, pixel)]}
+    scene = {
+        "version": 1,
+        "image": {
+            "width": width,
+            "height": height,
+            "background": Path(layers["background"]).name,
+            "figures": Path(layers["figures"]).name,
+        },
+        "pitch": {"length": PITCH_LENGTH_M, "width": PITCH_WIDTH_M},
+        "image_to_pitch": H.tolist(),
+        "pitch_to_image": np.linalg.inv(H).tolist(),
+        "players": players,
+        "ball": ball,
+    }
+    Path(layers["scene"]).write_text(json.dumps(scene, indent=1))

@@ -211,6 +211,23 @@ The next feature is overlay tools for analyzing the stills.
 **Why:** The user's call. The camera view is good enough to move on to the analysis features, which are the point of the tool for content creators.
 **What was rejected:** N/A. These are deferrals, not alternatives.
 
+## 2026-09-27, Overlay editor built: a live telestrator in the browser
+**What was decided:** Built per the spec and plan (`docs/superpowers/specs/2026-09-27-overlay-editor-design.md`, `docs/superpowers/plans/2026-09-27-overlay-editor.md`), run straight through at the user's request.
+- The camera view writes background and figures layers plus a scene file.
+- `footsight/edit.py`: a local server on 127.0.0.1 only.
+- `footsight/editor/`: a static page with plain JavaScript and SVG, no build step. Tools: H highlight, T tag, A run, P pass, K link, L line (Shift across the pitch, Alt dashed), Z zone, S spotlight. Also 1-4 colors, undo and redo, C clear, Esc cancel, arrow keys to step through stills, F full screen, E export, Cmd/Ctrl+S save.
+- Graphics are kept in pitch metres and player ids, projected in perspective, and drawn under the players.
+- Saving is opt-in.
+**Why:** The user makes content by narrating over stills and wanted TV-style analysis drawn live while recording. Choices made in chat: camera view only; a local web app; broadcast style; live-first; optional saving; stepping through a folder of stills; a Line tool added mid-design.
+**What was rejected:** Python redrawing the final image (two drawing engines that could drift apart). Overlays on the flat image (they would cover the players). A desktop PyQt app or an OpenCV window. A select-and-move tool in v1 (undo is faster live).
+**Verification:**
+- 136 pytest tests and 15 node tests pass.
+- New tests cover: layers stacking back to the full image; scene data round-tripping through the matrices; server listing, serving, saving, export validation, path safety and 127.0.0.1-only; the geometry module.
+- Real stills regenerated into `out/match/`.
+- A headless Chrome screenshot of the editor, fed a saved overlays file with every tool type, rendered all of them in perspective, under the players, with the tag and spotlight, and no JavaScript errors.
+- Not yet checked: drawing with the mouse, the keys, and export. The user needs to run the checklist.
+**Notes:** `node --test` needs the test files named directly (a folder argument fails). A `package.json` with `"type": "module"` marks the editor folder as ES modules.
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.

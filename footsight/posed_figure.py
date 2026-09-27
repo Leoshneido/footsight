@@ -16,6 +16,7 @@ from footsight.render import (
     ICON_SKIN_COLOR,
     ICON_SOCK_COLOR,
     SUPERSAMPLE,
+    paste_over,
 )
 
 JOINT_CONFIDENCE = 0.3
@@ -89,7 +90,7 @@ def draw_posed_player(image: Image.Image, pose: np.ndarray, height_px: float, sh
     _draw_head(draw, pose, confident, at, unit, outline)
 
     small = tile.resize((tile_w, tile_h), Image.BOX)
-    image.paste(small, (left, top), small)
+    paste_over(image, small, (left, top))
 
 
 def _tapered(draw, a, b, width_a, width_b, color):

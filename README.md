@@ -41,6 +41,37 @@ Options:
   ones (e.g. a broadcaster watermark) to remove them before the team split.
   Click again to restore. Enter accepts, Esc keeps everything.
 
+## Overlay editor (live telestrator)
+
+    python -m footsight.edit out/match/
+
+Opens the camera views in that folder in your browser (served from your own
+machine only), full screen, for drawing analysis graphics while you narrate
+and screen-record. Graphics lie on the grass under the players.
+
+| Key | Tool |
+|---|---|
+| H | Highlight a player (click again to remove) |
+| T | Tag a player: type a name, Enter |
+| A / P | Drag a run / pass arrow |
+| K | Click players to link them, Enter to finish |
+| L | Drag a line -- Shift: across the pitch, Alt: dashed |
+| Z | Click points for a zone, Enter to close |
+| S | Spotlight the highlighted players |
+| 1-4 | Yellow, cyan, white, red |
+| Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
+| C / Esc | Clear the still / cancel the shape in progress |
+| Left / Right | Previous / next still |
+| F | Full screen |
+| E / Cmd/Ctrl+S | Export `<still>_camera_edited.png` / save overlays to reopen later |
+
+Nothing is written unless you export or save. Stills made before the editor
+existed need the pipeline re-run (it now also writes the `_camera_background`,
+`_camera_figures` and `_camera_scene.json` files the editor reads).
+
+Tests: `pytest` for Python, `node --test footsight/editor/tests/*.test.mjs` for
+the editor's geometry.
+
 ## Scope
 
 Main wide/tactical broadcast camera stills only. Detects players,

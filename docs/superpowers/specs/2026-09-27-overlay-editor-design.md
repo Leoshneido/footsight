@@ -1,7 +1,7 @@
 # Overlay Editor (Live Telestrator) — Design Spec
 
 Date: 2026-09-27
-Status: Approved section by section in chat; pending written-spec review
+Status: Approved and implemented (plan: docs/superpowers/plans/2026-09-27-overlay-editor.md)
 
 ## Context
 
