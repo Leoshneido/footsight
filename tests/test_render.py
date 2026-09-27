@@ -1,7 +1,14 @@
 import pytest
 from PIL import Image
 
-from footsight.render import pitch_to_image_coords, render_pitch, LINE_COLOR, CENTER_CIRCLE_RADIUS
+from footsight.render import (
+    pitch_to_image_coords,
+    render_pitch,
+    CATEGORY_COLORS,
+    GOALKEEPER_COLOR,
+    LINE_COLOR,
+    CENTER_CIRCLE_RADIUS,
+)
 
 
 def test_pitch_to_image_coords_center_of_pitch():
@@ -116,3 +123,19 @@ def test_render_pitch_draws_penalty_box_edges_on_both_ends(tmp_path):
     assert _any_pixel_near(
         image, (52.5 - 16.5, 0.0), LINE_COLOR, radius=2, image_width_px=1050, margin_px=40
     )
+
+
+def test_render_pitch_draws_goalkeepers_in_their_own_color(tmp_path):
+    """Goalkeepers wear a kit distinct from both teams and the officials, so
+    the mockup gives them their own color rather than folding them into a
+    team."""
+    output_path = tmp_path / "mockup.png"
+    render_pitch(
+        [((-40.0, 0.0), "goalkeeper"), ((0.0, 0.0), "team_a"), ((10.0, 0.0), "team_b")],
+        str(output_path),
+        image_width_px=1050, margin_px=40,
+    )
+
+    image = Image.open(output_path)
+    assert _any_pixel_near(image, (-40.0, 0.0), GOALKEEPER_COLOR, image_width_px=1050, margin_px=40)
+    assert GOALKEEPER_COLOR not in (CATEGORY_COLORS["team_a"], CATEGORY_COLORS["team_b"], CATEGORY_COLORS["referee"])

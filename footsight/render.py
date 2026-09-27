@@ -11,10 +11,15 @@ TEAM_A_COLOR = (30, 100, 220)
 TEAM_B_COLOR = (220, 20, 60)
 REFEREE_COLOR = (255, 215, 0)
 ASSISTANT_REFEREE_COLOR = (150, 150, 90)
+# Keepers wear a kit distinct from both teams; both keepers share one color
+# here, since they stand at opposite ends and can't be confused for one
+# another.
+GOALKEEPER_COLOR = (0, 230, 120)
 
 CATEGORY_COLORS = {
     "team_a": TEAM_A_COLOR,
     "team_b": TEAM_B_COLOR,
+    "goalkeeper": GOALKEEPER_COLOR,
     "referee": REFEREE_COLOR,
     "assistant_referee": ASSISTANT_REFEREE_COLOR,
 }
