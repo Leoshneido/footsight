@@ -1,9 +1,25 @@
 import colorsys
 import math
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-PITCH_COLOR = (34, 139, 34)
+# 2100 px wide gives ~18.5 px per meter: enough for real-size players
+# (~33 px tall) to stay readable.
+DEFAULT_IMAGE_WIDTH_PX = 2100
+DEFAULT_MARGIN_PX = 80
+
+# Mown grass: alternating light and dark bands of equal width from goal line
+# to goal line (continuing into the margin), with a seeded texture -- fine
+# grain plus larger faint patches -- so every render of the same input is
+# identical.
+GRASS_LIGHT_COLOR = (86, 160, 62)
+GRASS_DARK_COLOR = (70, 142, 50)
+GRASS_BANDS = 20
+GRASS_GRAIN_SIGMA = 6.0
+GRASS_PATCH_CELL_PX = 40
+GRASS_PATCH_STRENGTH = 0.14
+GRASS_SEED = 7
 LINE_COLOR = (255, 255, 255)
 BALL_FILL_COLOR = (255, 255, 255)
 BALL_OUTLINE_COLOR = (0, 0, 0)
@@ -34,10 +50,13 @@ DEFAULT_SHORTS_COLOR = (30, 30, 30)
 # much. Hue and brightness are kept; greys and whites stay grey and white.
 KIT_SATURATION_BOOST = 1.5
 
-# Player icon: a small broadcast-style figure (see _draw_player_icon).
+# Player icon: a small broadcast-style figure (see _draw_player_icon),
+# drawn in abstract units and sized so head-top to soles is a real player's
+# height on the pitch.
 SUPERSAMPLE = 4
-ICON_UNIT_PX = 1.8
-ICON_TILE_HALF_PX = 26
+PLAYER_HEIGHT_M = 1.8
+ICON_HEIGHT_UNITS = 22.5  # head top at -11, soles at +11.5
+ICON_TILE_HALF_UNITS = 15.0  # room for the arms and the blurred shadow
 # Where the soles are, in drawing units below the tile center (the socks
 # run from 9 to 11.5 units down).
 ICON_FEET_UNITS = 11.0
@@ -67,8 +86,8 @@ def pitch_to_image_coords(
     point: tuple[float, float],
     pitch_length: float = 105.0,
     pitch_width: float = 68.0,
-    image_width_px: int = 1050,
-    margin_px: int = 40,
+    image_width_px: int = DEFAULT_IMAGE_WIDTH_PX,
+    margin_px: int = DEFAULT_MARGIN_PX,
 ) -> tuple[float, float]:
     x, y = point
     scale = (image_width_px - 2 * margin_px) / pitch_length
@@ -153,7 +172,7 @@ def vivid_kit_color(color: tuple[int, int, int]) -> tuple[int, int, int]:
     return (int(round(red * 255)), int(round(green * 255)), int(round(blue * 255)))
 
 
-def _draw_player_icon(image, position_px, shirt, shorts, size=1.0):
+def _draw_player_icon(image, position_px, shirt, shorts, unit_px):
     """A small player as seen from a high broadcast camera: soft shadow,
     legs with white socks, shorts, shirt with arms, head with hair.
 
@@ -161,10 +180,12 @@ def _draw_player_icon(image, position_px, shirt, shorts, size=1.0):
     down (box filter, so flat areas keep their exact color), then pasted
     so the feet stand on position_px -- a player's position is their
     ground-contact point, and a ball at their feet in the still has to land
-    at the icon's feet, not on its shirt.
+    at the icon's feet, not on its shirt. unit_px is the size of one
+    drawing unit on the final image.
     """
-    unit = ICON_UNIT_PX * size * SUPERSAMPLE
-    tile_half = int(ICON_TILE_HALF_PX * size) * SUPERSAMPLE
+    unit = unit_px * SUPERSAMPLE
+    tile_half_px = math.ceil(ICON_TILE_HALF_UNITS * unit_px)
+    tile_half = tile_half_px * SUPERSAMPLE
     tile_size = tile_half * 2
     tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
     cx, cy = tile_half, tile_half
@@ -198,9 +219,27 @@ def _draw_player_icon(image, position_px, shirt, shorts, size=1.0):
 
     small = tile.resize((tile_size // SUPERSAMPLE, tile_size // SUPERSAMPLE), Image.BOX)
     px, py = position_px
-    offset = int(ICON_TILE_HALF_PX * size)
-    feet_above_center = int(round(ICON_FEET_UNITS * ICON_UNIT_PX * size))
-    image.paste(small, (int(round(px)) - offset, int(round(py)) - offset - feet_above_center), small)
+    feet_above_center = int(round(ICON_FEET_UNITS * unit_px))
+    image.paste(small, (int(round(px)) - tile_half_px, int(round(py)) - tile_half_px - feet_above_center), small)
+
+
+def _grass(image_width_px, image_height_px, margin_px, scale):
+    """The mown, textured pitch surface as an RGB image."""
+    columns = np.arange(image_width_px)
+    band_width_px = (105.0 / GRASS_BANDS) * scale
+    dark = (np.floor((columns - margin_px) / band_width_px).astype(int) % 2).astype(bool)
+    shade = np.where(dark[:, None], GRASS_DARK_COLOR, GRASS_LIGHT_COLOR).astype(np.float32)
+    grass = np.broadcast_to(shade[None, :, :], (image_height_px, image_width_px, 3)).copy()
+
+    rng = np.random.default_rng(GRASS_SEED)
+    grain = rng.normal(0.0, GRASS_GRAIN_SIGMA, (image_height_px, image_width_px))
+    coarse = rng.normal(128.0, 40.0, (image_height_px // GRASS_PATCH_CELL_PX + 2, image_width_px // GRASS_PATCH_CELL_PX + 2))
+    patches = np.asarray(
+        Image.fromarray(coarse.clip(0, 255).astype(np.uint8)).resize((image_width_px, image_height_px), Image.BICUBIC),
+        dtype=np.float32,
+    ) - 128.0
+    grass += (grain + patches * GRASS_PATCH_STRENGTH)[..., None]
+    return Image.fromarray(grass.clip(0, 255).astype(np.uint8))
 
 
 def render_pitch(
@@ -209,9 +248,9 @@ def render_pitch(
     ball_position: tuple[float, float] | None = None,
     pitch_length: float = 105.0,
     pitch_width: float = 68.0,
-    image_width_px: int = 1050,
-    margin_px: int = 40,
-    dot_radius_px: int = 8,
+    image_width_px: int = DEFAULT_IMAGE_WIDTH_PX,
+    margin_px: int = DEFAULT_MARGIN_PX,
+    player_height_m: float = PLAYER_HEIGHT_M,
     ball_radius_px: int = 6,
     kit_colors: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] | None = None,
 ) -> None:
@@ -221,18 +260,19 @@ def render_pitch(
     scale = (image_width_px - 2 * margin_px) / pitch_length
     image_height_px = int(pitch_width * scale) + 2 * margin_px
 
-    image = Image.new("RGB", (image_width_px, image_height_px), PITCH_COLOR)
+    image = _grass(image_width_px, image_height_px, margin_px, scale)
     draw = ImageDraw.Draw(image)
 
     _draw_pitch_markings(draw, pitch_length, pitch_width, image_width_px, margin_px, scale)
 
+    icon_unit_px = player_height_m * scale / ICON_HEIGHT_UNITS
     for position, category in player_positions:
         px, py = pitch_to_image_coords(position, pitch_length, pitch_width, image_width_px, margin_px)
         if category in kit_colors:
             shirt, shorts = (vivid_kit_color(color) for color in kit_colors[category])
         else:
             shirt, shorts = CATEGORY_COLORS[category], DEFAULT_SHORTS_COLOR
-        _draw_player_icon(image, (px, py), shirt, shorts, size=dot_radius_px / 8)
+        _draw_player_icon(image, (px, py), shirt, shorts, icon_unit_px)
 
     if ball_position is not None:
         px, py = pitch_to_image_coords(ball_position, pitch_length, pitch_width, image_width_px, margin_px)

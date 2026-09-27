@@ -178,18 +178,32 @@ def test_render_pitch_keeps_the_fixed_color_for_categories_without_a_detected_ki
     assert GOALKEEPER_COLOR in near_keeper
 
 
-def test_render_pitch_player_icons_are_big_enough_to_read(tmp_path):
-    """At the default 1050 px mockup width the figure has to be large enough
-    to make out shirt and shorts -- ~25 px tall was too small to read."""
-    output_path = tmp_path / "mockup.png"
-    render_pitch([((0.0, 10.0), "team_a")], str(output_path), image_width_px=1050, margin_px=40)
-
-    image = Image.open(output_path).convert("RGB")
-    render_pitch([], str(tmp_path / "empty.png"), image_width_px=1050, margin_px=40)
-    empty = Image.open(tmp_path / "empty.png").convert("RGB")
+def _figure_height_px(tmp_path, image_width_px, margin_px):
     from PIL import ImageChops
-    top, bottom = ImageChops.difference(image, empty).getbbox()[1::2]
-    assert bottom - top >= 36
+
+    render_pitch([((0.0, 10.0), "team_a")], str(tmp_path / "one.png"), image_width_px=image_width_px, margin_px=margin_px)
+    render_pitch([], str(tmp_path / "none.png"), image_width_px=image_width_px, margin_px=margin_px)
+    one = Image.open(tmp_path / "one.png").convert("RGB")
+    none = Image.open(tmp_path / "none.png").convert("RGB")
+    _, top, _, bottom = ImageChops.difference(one, none).getbbox()
+    return bottom - top
+
+
+def test_render_pitch_draws_players_at_real_life_size(tmp_path):
+    """A figure is as tall as a real player (~1.8 m) relative to the pitch,
+    whatever the image width -- at 4.3 m they looked oversized. The measured
+    height includes the soft shadow below the feet, hence the allowance."""
+    for image_width_px, margin_px in ((1050, 40), (2100, 80)):
+        pixels_per_meter = (image_width_px - 2 * margin_px) / 105.0
+        height_m = _figure_height_px(tmp_path, image_width_px, margin_px) / pixels_per_meter
+        assert 1.6 <= height_m <= 2.4, (image_width_px, height_m)
+
+
+def test_render_pitch_defaults_to_a_width_where_real_size_players_stay_readable(tmp_path):
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path))
+
+    assert Image.open(output_path).width == 2100
 
 
 def test_render_pitch_draws_detected_kits_more_vivid_than_the_dull_broadcast_color(tmp_path):
@@ -231,3 +245,50 @@ def test_render_pitch_stands_each_figure_on_its_ground_point(tmp_path):
     ]
     assert rows_with_shirt, "shirt not drawn"
     assert max(rows_with_shirt) < py - 5, f"shirt reaches down to y={max(rows_with_shirt)}, feet point is y={py}"
+
+
+
+def _band_mean(image, x_pitch_m, **kwargs):
+    """Average color of a small patch of grass at a given distance along the
+    pitch (on the y=28 m line, clear of the markings)."""
+    import numpy as np
+
+    px, py = (int(round(v)) for v in pitch_to_image_coords((x_pitch_m, 28.0), **kwargs))
+    patch = np.array(image)[py - 5:py + 6, px - 5:px + 6].reshape(-1, 3)
+    return patch.mean(axis=0), patch.std(axis=0)
+
+
+def test_render_pitch_mows_the_grass_in_alternating_light_and_dark_bands(tmp_path):
+    """20 bands of 5.25 m from goal line to goal line, alternating shades --
+    the flat single green didn't look like a real pitch."""
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path), image_width_px=2100, margin_px=80)
+    image = Image.open(output_path).convert("RGB")
+
+    band_width_m = 105.0 / 20
+    first_band_center = -52.5 + band_width_m / 2
+    shades = [
+        _band_mean(image, first_band_center + band * band_width_m, image_width_px=2100, margin_px=80)[0].sum()
+        for band in (2, 3, 4, 5)
+    ]
+    assert shades[0] - shades[1] > 15 and shades[2] - shades[3] > 15, shades
+    # the texture varies each band a little, but never enough to blur the pattern
+    assert min(shades[0], shades[2]) > max(shades[1], shades[3]), shades
+
+
+def test_render_pitch_gives_the_grass_a_visible_texture(tmp_path):
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path), image_width_px=2100, margin_px=80)
+    image = Image.open(output_path).convert("RGB")
+
+    _, spread = _band_mean(image, -30.0, image_width_px=2100, margin_px=80)
+    assert spread.max() > 4, spread
+
+
+def test_render_pitch_grass_is_the_same_on_every_render(tmp_path):
+    """The texture is random-looking but seeded, so the same input always
+    gives the same mockup."""
+    render_pitch([], str(tmp_path / "a.png"), image_width_px=1050, margin_px=40)
+    render_pitch([], str(tmp_path / "b.png"), image_width_px=1050, margin_px=40)
+
+    assert Image.open(tmp_path / "a.png").tobytes() == Image.open(tmp_path / "b.png").tobytes()
