@@ -76,4 +76,3 @@ striped teams spread widely on the circle.
 - No ball found on 12.00.14 (existing issue, not investigated; can now be added by hand with --pick-ball).
 - Barça's striped kit renders as a dark grey-purple blend even after the x1.5 display saturation boost.
 - Future direction: angled/perspective mockup camera with flat icons (needs its own design pass).
-- Local `-v9` weights not confirmed identical to the Roboflow `setup.sh` download.

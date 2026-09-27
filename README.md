@@ -17,7 +17,8 @@ Turn a football (soccer) broadcast still into a 2D top-down pitch mockup.
 The player-detection model comes from Roboflow's
 [sports](https://github.com/roboflow/sports) repo (link taken from its
 `examples/soccer/setup.sh`, which saves it as `football-player-detection.pt`).
-The local copy was named `-v9`; not yet confirmed to be the identical file.
+The file is saved here as `-v9`; it is byte-identical to that download
+(SHA-256 `75b09c377fbf9d0791d23f6cfb689f5aed6eaa43a6818bd1fb884cf7507fffaf`).
 
 ## Usage
 
