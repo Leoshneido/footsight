@@ -9,3 +9,4 @@ tqdm
 pytest
 matplotlib
 shapely
+ultralytics
