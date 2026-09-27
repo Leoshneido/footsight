@@ -68,7 +68,9 @@ def run(
     if ball_pixel is not None:
         ball_center = ball_pixel
     elif ball_box is not None:
-        ball_center = projection.bbox_to_center_point(ball_box)
+        # Project where the ball touches the grass (bottom of its box), like
+        # a player's feet -- its center sits a ball-radius above the pitch.
+        ball_center = projection.bbox_to_ground_point(ball_box)
     else:
         ball_center = None
     # The user reviews what detection found: move it, add a missed ball, or

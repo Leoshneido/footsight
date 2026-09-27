@@ -93,14 +93,16 @@ def test_run_includes_ball_position_when_ball_detected(
     mock_compute_homography.return_value = np.eye(3)
     mock_detect_players.return_value = []
     mock_classify_players.return_value = []
-    mock_detect_ball.return_value = (10.0, 10.0, 20.0, 20.0)  # center = (15.0, 15.0)
+    # The ball touches the grass at the bottom of its box, not its center --
+    # projecting the center put it at a player's shins instead of their feet.
+    mock_detect_ball.return_value = (10.0, 10.0, 20.0, 20.0)  # bottom-center = (15.0, 20.0)
 
     pipeline.run(
         "still.jpg", "mockup.png",
         detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
     )
 
-    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=(15.0, 15.0), kit_colors={})
+    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=(15.0, 20.0), kit_colors={})
 
 
 @patch("footsight.pipeline.render.render_pitch")
@@ -297,7 +299,7 @@ def test_run_lets_the_user_remove_a_wrongly_detected_ball(
     mock_compute_homography.return_value = np.eye(3)
     mock_detect_players.return_value = []
     mock_classify_players.return_value = []
-    mock_detect_ball.return_value = (10.0, 10.0, 20.0, 20.0)  # center = (15.0, 15.0)
+    mock_detect_ball.return_value = (10.0, 10.0, 20.0, 20.0)  # bottom-center = (15.0, 20.0)
     reviewed = []
 
     def ball_review(image_path, detected):
@@ -310,7 +312,7 @@ def test_run_lets_the_user_remove_a_wrongly_detected_ball(
         ball_review=ball_review,
     )
 
-    assert reviewed == [("still.jpg", (15.0, 15.0))]
+    assert reviewed == [("still.jpg", (15.0, 20.0))]
     assert mock_render_pitch.call_args[1]["ball_position"] is None
 
 

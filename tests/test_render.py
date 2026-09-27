@@ -28,6 +28,13 @@ def _pixel(image, point, **kwargs):
     return image.getpixel((int(round(px)), int(round(py))))
 
 
+def _icon_pixels(image, point, **kwargs):
+    """Every color in the area a player figure occupies: it stands on its
+    ground point, so the figure is above the point, not centered on it."""
+    px, py = (int(round(v)) for v in pitch_to_image_coords(point, **kwargs))
+    return {image.getpixel((x, y)) for x in range(px - 12, px + 13) for y in range(py - 40, py + 1)}
+
+
 def _any_pixel_near(image, point, color, radius=2, **kwargs):
     px, py = pitch_to_image_coords(point, **kwargs)
     for dx in range(-radius, radius + 1):
@@ -45,7 +52,7 @@ def test_render_pitch_draws_team_a_head_at_expected_pixel(tmp_path):
     )
 
     image = Image.open(output_path)
-    assert _any_pixel_near(image, (0.0, 0.0), (30, 100, 220), image_width_px=1050, margin_px=40)
+    assert (30, 100, 220) in _icon_pixels(image, (0.0, 0.0), image_width_px=1050, margin_px=40)
 
 
 def test_render_pitch_draws_team_b_and_referee_with_distinct_colors(tmp_path):
@@ -56,8 +63,8 @@ def test_render_pitch_draws_team_b_and_referee_with_distinct_colors(tmp_path):
     )
 
     image = Image.open(output_path)
-    assert _any_pixel_near(image, (-30.0, 0.0), (220, 20, 60), image_width_px=1050, margin_px=40)
-    assert _any_pixel_near(image, (30.0, 0.0), (255, 215, 0), image_width_px=1050, margin_px=40)
+    assert (220, 20, 60) in _icon_pixels(image, (-30.0, 0.0), image_width_px=1050, margin_px=40)
+    assert (255, 215, 0) in _icon_pixels(image, (30.0, 0.0), image_width_px=1050, margin_px=40)
 
 
 def test_render_pitch_with_no_players_still_creates_pitch(tmp_path):
@@ -138,17 +145,9 @@ def test_render_pitch_draws_goalkeepers_in_their_own_color(tmp_path):
     )
 
     image = Image.open(output_path)
-    assert _any_pixel_near(image, (-40.0, 0.0), GOALKEEPER_COLOR, image_width_px=1050, margin_px=40)
+    assert GOALKEEPER_COLOR in _icon_pixels(image, (-40.0, 0.0), image_width_px=1050, margin_px=40)
     assert GOALKEEPER_COLOR not in (CATEGORY_COLORS["team_a"], CATEGORY_COLORS["team_b"], CATEGORY_COLORS["referee"])
 
-
-def _pixels_near(image, point, radius, **kwargs):
-    px, py = pitch_to_image_coords(point, **kwargs)
-    return {
-        image.getpixel((int(round(px)) + dx, int(round(py)) + dy))
-        for dx in range(-radius, radius + 1)
-        for dy in range(-radius, radius + 1)
-    }
 
 
 def test_render_pitch_draws_a_team_in_its_detected_kit(tmp_path):
@@ -161,7 +160,7 @@ def test_render_pitch_draws_a_team_in_its_detected_kit(tmp_path):
         kit_colors={"team_a": ((245, 130, 30), (240, 240, 240))},
     )
 
-    near = _pixels_near(Image.open(output_path), (0.0, 0.0), radius=8, image_width_px=1050, margin_px=40)
+    near = _icon_pixels(Image.open(output_path), (0.0, 0.0), image_width_px=1050, margin_px=40)
     assert vivid_kit_color((245, 130, 30)) in near
     assert (240, 240, 240) in near  # white has no saturation to boost
     assert CATEGORY_COLORS["team_a"] not in near
@@ -175,7 +174,7 @@ def test_render_pitch_keeps_the_fixed_color_for_categories_without_a_detected_ki
         kit_colors={"team_a": ((245, 130, 30), (240, 240, 240))},
     )
 
-    near_keeper = _pixels_near(Image.open(output_path), (20.0, 0.0), radius=8, image_width_px=1050, margin_px=40)
+    near_keeper = _icon_pixels(Image.open(output_path), (20.0, 0.0), image_width_px=1050, margin_px=40)
     assert GOALKEEPER_COLOR in near_keeper
 
 
@@ -206,10 +205,29 @@ def test_render_pitch_draws_detected_kits_more_vivid_than_the_dull_broadcast_col
         kit_colors={"team_a": (dull_red, (240, 240, 240))},
     )
 
-    shirt = Image.open(output_path).convert("RGB").getpixel(
-        tuple(int(round(v)) for v in pitch_to_image_coords((0.0, 0.0), image_width_px=1050, margin_px=40))
-    )
+    shirt = vivid_kit_color(dull_red)
+    assert shirt in _icon_pixels(Image.open(output_path).convert("RGB"), (0.0, 0.0), image_width_px=1050, margin_px=40)
     dull_h, _, dull_s = colorsys.rgb_to_hls(*(c / 255 for c in dull_red))
     drawn_h, _, drawn_s = colorsys.rgb_to_hls(*(c / 255 for c in shirt))
     assert drawn_s > dull_s + 0.1, shirt
     assert abs(drawn_h - dull_h) < 0.02, shirt
+
+
+def test_render_pitch_stands_each_figure_on_its_ground_point(tmp_path):
+    """A player's position is where their feet touch the pitch, so the
+    figure is drawn standing on it: shirt above the point, nothing of the
+    figure below it (bar the shadow). That is what puts a ball at a
+    player's feet in the still at the icon's feet on the mockup."""
+    output_path = tmp_path / "mockup.png"
+    kit = {"team_a": ((245, 130, 30), (240, 240, 240))}
+    render_pitch([((0.0, 0.0), "team_a")], str(output_path), image_width_px=1050, margin_px=40, kit_colors=kit)
+
+    image = Image.open(output_path).convert("RGB")
+    px, py = (int(round(v)) for v in pitch_to_image_coords((0.0, 0.0), image_width_px=1050, margin_px=40))
+    shirt = vivid_kit_color((245, 130, 30))
+    rows_with_shirt = [
+        y for y in range(py - 40, py + 40)
+        if any(image.getpixel((x, y)) == shirt for x in range(px - 15, px + 16))
+    ]
+    assert rows_with_shirt, "shirt not drawn"
+    assert max(rows_with_shirt) < py - 5, f"shirt reaches down to y={max(rows_with_shirt)}, feet point is y={py}"

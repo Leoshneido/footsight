@@ -38,6 +38,9 @@ KIT_SATURATION_BOOST = 1.5
 SUPERSAMPLE = 4
 ICON_UNIT_PX = 1.8
 ICON_TILE_HALF_PX = 26
+# Where the soles are, in drawing units below the tile center (the socks
+# run from 9 to 11.5 units down).
+ICON_FEET_UNITS = 11.0
 ICON_SKIN_COLOR = (205, 150, 115)
 ICON_HAIR_COLOR = (40, 28, 20)
 ICON_SOCK_COLOR = (250, 250, 250)
@@ -156,7 +159,9 @@ def _draw_player_icon(image, position_px, shirt, shorts, size=1.0):
 
     Drawn SUPERSAMPLE times larger on its own transparent tile and shrunk
     down (box filter, so flat areas keep their exact color), then pasted
-    centered on the shirt at position_px.
+    so the feet stand on position_px -- a player's position is their
+    ground-contact point, and a ball at their feet in the still has to land
+    at the icon's feet, not on its shirt.
     """
     unit = ICON_UNIT_PX * size * SUPERSAMPLE
     tile_half = int(ICON_TILE_HALF_PX * size) * SUPERSAMPLE
@@ -194,7 +199,8 @@ def _draw_player_icon(image, position_px, shirt, shorts, size=1.0):
     small = tile.resize((tile_size // SUPERSAMPLE, tile_size // SUPERSAMPLE), Image.BOX)
     px, py = position_px
     offset = int(ICON_TILE_HALF_PX * size)
-    image.paste(small, (int(round(px)) - offset, int(round(py)) - offset), small)
+    feet_above_center = int(round(ICON_FEET_UNITS * ICON_UNIT_PX * size))
+    image.paste(small, (int(round(px)) - offset, int(round(py)) - offset - feet_above_center), small)
 
 
 def render_pitch(
