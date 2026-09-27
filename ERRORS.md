@@ -32,10 +32,11 @@ Log of approaches that took more than 2 attempts to work. Checked before suggest
 - **Circular median for both the trim and the team split** — fixed that player, but Barça's circular medians spread over 130-179, which widened the Tukey fence until the referee (33) and the watermark got through on 2 of the 3 Barça stills.
 - **Hue histogram per player as the feature (k-means on 18-bin histograms, fence on distance to centroid)** — trimmed the referee everywhere, but also trimmed or misplaced 5-6 real players across the stills, including 2 Bayern players.
 
-**What worked:** a hybrid. The trim runs on the straight-line median (reliable for the referee on every still), then the team split runs on the circular median, with each hue as a point on a unit circle for k-means. Every case with known ground truth is correct on all 4 stills. As a side effect it also fixed 2 players standing in front of an ad board (read 118-119, now with Feyenoord).
+**What worked:** a hybrid. The trim runs on the straight-line median (reliable for the referee on every still), then the team split runs on the circular median, with each hue as a point on a unit circle for k-means. Every case with known ground truth is correct on all 4 stills. (A first write-up claimed it also fixed 2 "players" in front of an ad board. They turned out to be one ball boy behind the touchline, who is dropped as off-pitch anyway.)
 
 **Note for next time:**
 - A single hue number can't describe a two-color kit. Before changing the feature, look at the per-player pixel histograms: that is what showed the 50/50 split.
+- Before calling a box a player, check where it projects. A person in front of an ad board may be standing off the pitch.
 - Weak spot: the trim still uses the straight-line median, so a striped player whose linear median falls far enough into the gap could be trimmed as an official. Not seen yet.
 
 ## Ball detection on broadcast stills (2026-09-10)

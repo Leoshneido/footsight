@@ -18,8 +18,8 @@ still.png
   -> pitch_calibration.compute_homography   3x3 image->pitch homography (or None -> RuntimeError)
   -> player_detection.detect_players        [(box, role)], role in player/goalkeeper/referee
   -> review(image_path, detections)         optional: --remove-detections drops false boxes
-  -> team_classification.classify_players   only role=="player" boxes -> team_a/team_b/officials
-  -> projection (box bottom-center -> pitch meters), filter_to_pitch
+  -> projection (box bottom-center -> pitch meters), filter_to_pitch   off-pitch people dropped here
+  -> team_classification.classify_players   only on-pitch role=="player" boxes -> team_a/team_b/officials
   -> ball: hand-placed pixel (--pick-ball) wins, else ball_detection.find_ball
   -> render.render_pitch                    PNG
 ```
@@ -58,7 +58,7 @@ striped teams spread widely on the circle.
 - **Verify on real stills, not just tests.** Synthetic flat-color rectangles can't reproduce photo noise. Crop every doubtful box and look at it before concluding.
 - **Watermarks** (Paramount+) score 0.65-0.73 as players -- overlapping real, partly hidden players (0.72). No confidence cutoff or box-shape filter separates them, and they project inside the pitch. Remove by hand.
 - **Hue in the 40-60 band** means grass in the crop, not a jersey.
-- **Stills in front of ad boards** pick up board color; the circular split currently handles the known cases.
+- **Ball boys** behind the touchline get detected as players (11.58.59, 12.00.14). They project about 5.5 m past the line and are dropped before the team split. The 5 m margin clears them by less than 1 m, so check where a box projects before calling it a player.
 - Generic detectors (COCO) miss the ~12 px ball; a learned ball model flags spare balls by the touchline. Classical detection + manual fallback is the standing choice.
 - Before changing a jersey feature, inspect per-player hue histograms -- that is what exposed the 50/50 striped-kit split.
 
@@ -67,11 +67,11 @@ striped teams spread widely on the circle.
 - Use the project venv: `.venv/bin/python -m pytest -q`.
 - Test-first: write the failing test, watch it fail for the right reason, then implement. Tests mock stages in `test_pipeline.py`; real-image checks go in a scratch script, not the suite.
 - Sample stills are in `stills/`; macOS filenames contain a narrow no-break space before AM/PM -- use `glob`, not typed paths.
-- Real-still reference results (as of 2026-09-26): Bayern/Bodo 5/7 + goalkeeper; Barca/Feyenoord stills 10-11 per team + referee trimmed; watermark trimmed or removed.
+- Real-still reference results (as of 2026-09-26, full pipeline, watermark removed by hand): Bayern 5+7 + goalkeeper + ball; 11.58.59 10+10 + 1 referee + ball; 11.59.40 10+9 + 2 referees + ball; 12.00.14 10+10 + 2 referees, no ball.
 
 ## Open items
 
 - A striped player whose straight-line median falls deep in a hue gap could still be trimmed as an official (not yet seen).
-- On 12.00.14 one classified player projects off-pitch and is dropped; not yet identified.
+- No ball found on 12.00.14 (existing issue, not investigated).
 - Future direction: angled/perspective mockup camera with flat icons (needs its own design pass).
 - Local `-v9` weights not confirmed identical to the Roboflow `setup.sh` download.

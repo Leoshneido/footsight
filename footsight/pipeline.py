@@ -31,29 +31,32 @@ def run(
     if review is not None:
         detections = review(input_path, detections)
     boxes = [box for box, _ in detections]
-    player_boxes = [box for box, role in detections if role == player_detection.PLAYER_ROLE]
+
+    # Project first and keep only people on the pitch, so off-pitch
+    # detections (a ball boy behind the touchline, a spectator) never reach
+    # the jersey clustering where they could skew the team split.
+    ground_points = [projection.bbox_to_ground_point(box) for box in boxes]
+    on_pitch = [
+        (point, detections[index])
+        for index, point in projection.project_points_indexed(homography, ground_points)
+        if projection.filter_to_pitch([point])
+    ]
+
+    player_boxes = [box for _, (box, role) in on_pitch if role == player_detection.PLAYER_ROLE]
     team_labels = iter(team_classification.classify_players(input_path, player_boxes))
 
     # Goalkeepers and officials are rendered by the role the detector gave
     # them; only outfield players need a team worked out from jersey color.
     # A player the classifier trimmed as an odd jersey color is a referee
     # the detector mislabeled, so it renders as one.
-    categories = []
-    for _, role in detections:
+    player_positions = []
+    for point, (_, role) in on_pitch:
         if role != player_detection.PLAYER_ROLE:
-            categories.append(role)
+            player_positions.append((point, role))
             continue
         label = next(team_labels)
-        categories.append("referee" if label == team_classification.OFFICIALS_LABEL else label)
-
-    ground_points = [projection.bbox_to_ground_point(box) for box in boxes]
-    projected_indexed = projection.project_points_indexed(homography, ground_points)
-
-    player_positions = []
-    for index, point in projected_indexed:
-        if not projection.filter_to_pitch([point]):
-            continue
-        player_positions.append((point, categories[index]))
+        category = "referee" if label == team_classification.OFFICIALS_LABEL else label
+        player_positions.append((point, category))
 
     ball_position = None
     # A hand-placed ball wins outright: it is only ever supplied because

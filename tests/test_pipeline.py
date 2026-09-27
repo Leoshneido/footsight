@@ -214,3 +214,32 @@ def test_run_drops_detections_the_user_removed_before_classifying(
     mock_classify_players.assert_called_once_with("still.jpg", [(0.0, 0.0, 10.0, 20.0)])
     rendered_points, _ = mock_render_pitch.call_args[0]
     assert rendered_points == [((5.0, 20.0), "team_a")]
+
+
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_leaves_off_pitch_detections_out_of_the_team_split(
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch
+):
+    """A ball boy behind the touchline gets detected as a "player" (seen on
+    the 11.58.59 and 12.00.14 stills). He was already dropped from the
+    mockup, but only after classification -- so his kit still took part in
+    the jersey clustering and could skew the team split."""
+    mock_compute_homography.return_value = np.eye(3)
+    on_pitch = ((0.0, 0.0, 10.0, 20.0), "player")
+    ball_boy = ((100.0, 0.0, 110.0, 20.0), "player")  # projects to x=105, past the 57.5 m limit
+    mock_detect_players.return_value = [on_pitch, ball_boy]
+    mock_classify_players.return_value = ["team_a"]
+    mock_detect_ball.return_value = None
+
+    pipeline.run(
+        "still.jpg", "mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+    )
+
+    mock_classify_players.assert_called_once_with("still.jpg", [(0.0, 0.0, 10.0, 20.0)])
+    rendered_points, _ = mock_render_pitch.call_args[0]
+    assert rendered_points == [((5.0, 20.0), "team_a")]
