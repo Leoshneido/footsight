@@ -15,6 +15,29 @@ Log of approaches that took more than 2 attempts to work. Checked before suggest
 - Synthetic flat-color test rectangles can't reproduce real photo noise. Always verify against a real still, not just unit tests.
 - Still open: fixed `k=3` breaks when a 4th hue group is present (goalkeeper kit, non-player detections). See MEMORY.md.
 
+## Team classification round 3 — splitting teams after the detector change (2026-09-26)
+**What didn't work:**
+- **k=2 hue clustering on the `player` boxes alone** — sound in principle (the football model labels goalkeepers and referees separately, so only two teams should remain), but the model hands the main referee over as a `player` at 0.91 confidence. That single yellow hue (~34) sits ~65 units from the nearest team while the two teams are ~15 apart, so it took one cluster and both real teams merged into the other: 21 icons one color, 1 the other.
+- **Trimming hue outliers by Tukey fence (1.5×IQR), first pass** — fixed the Barça/Feyenoord and Bayern stills, but over-fires on the 12.00.14 still: 2 real Barça players were trimmed because their arms-wide pose made the torso sample mostly green pitch, and grass hue (40-60) reads as an outlier next to their real ~125.
+
+**What worked (implemented and verified on all 4 stills, 2026-09-26):** dropping grass-hued pixels from the torso sample before taking the median moves those two players from 43→129 and 42→126, while the real referee stays an outlier at 34.
+
+**Note for next time:**
+- When a jersey hue lands in the 40-60 band, suspect the grass in the crop before suspecting the clustering. The torso window is a rectangle; a stretched or diving player fills a fraction of it.
+- Broadcast watermarks get detected as players (0.65-0.73 across stills). Filtering by box shape fails — a stretching player's box was 94x103, nearly square. Filtering by confidence fails too: raising the threshold to 0.75 drops a real, partly hidden Bodø player scoring 0.72 on the Bayern still. The watermark also projects inside the pitch lines, so the off-pitch filter can't catch it. What worked: `--remove-detections`, clicking it away by hand.
+
+## Team classification round 4 — striped kits across the red hue seam (2026-09-26)
+**What didn't work:**
+- **Straight-line median hue (the existing approach)** — a Barça player on 11.59.40, split ~50/50 between claret (hue 170-179 and 0-10, straddling the seam) and blue, read 75: a hue the jersey doesn't contain. That put him with Feyenoord.
+- **Circular median for both the trim and the team split** — fixed that player, but Barça's circular medians spread over 130-179, which widened the Tukey fence until the referee (33) and the watermark got through on 2 of the 3 Barça stills.
+- **Hue histogram per player as the feature (k-means on 18-bin histograms, fence on distance to centroid)** — trimmed the referee everywhere, but also trimmed or misplaced 5-6 real players across the stills, including 2 Bayern players.
+
+**What worked:** a hybrid. The trim runs on the straight-line median (reliable for the referee on every still), then the team split runs on the circular median, with each hue as a point on a unit circle for k-means. Every case with known ground truth is correct on all 4 stills. As a side effect it also fixed 2 players standing in front of an ad board (read 118-119, now with Feyenoord).
+
+**Note for next time:**
+- A single hue number can't describe a two-color kit. Before changing the feature, look at the per-player pixel histograms: that is what showed the 50/50 split.
+- Weak spot: the trim still uses the straight-line median, so a striped player whose linear median falls far enough into the gap could be trimmed as an official. Not seen yet.
+
 ## Ball detection on broadcast stills (2026-09-10)
 **What didn't work:**
 - **Faster R-CNN COCO "sports ball" (label 37)** — found nothing even at 0.02 confidence. The ball is ~12-15px in a 3020x1700 frame, too small for a general detector.
