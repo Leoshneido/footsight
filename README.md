@@ -13,6 +13,10 @@ Turn a football (soccer) broadcast still into a 2D top-down pitch mockup.
     mkdir -p weights/roboflow
     pip install gdown
     gdown -O weights/roboflow/football-player-detection-v9.pt "https://drive.google.com/uc?id=17PXFNlx-jI7VjVo_vQnB1sONjRyvoB-q"
+    mkdir -p weights/ultralytics
+    curl -L -o weights/ultralytics/yolo11m-pose.pt https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m-pose.pt
+
+The pose model (42.5 MB) is used for the camera-angle view.
 
 The player-detection model comes from Roboflow's
 [sports](https://github.com/roboflow/sports) repo (link taken from its
@@ -23,6 +27,10 @@ The file is saved here as `-v9`; it is byte-identical to that download
 ## Usage
 
     python -m footsight.pipeline path/to/still.jpg path/to/mockup.png
+
+Each run writes two images: `mockup.png` (top-down) and `mockup_camera.png`
+(the still's own camera angle, redrawn with a drawn stadium and players posed
+like the real ones).
 
 Options:
 

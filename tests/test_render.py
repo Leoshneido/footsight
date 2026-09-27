@@ -361,3 +361,11 @@ def test_render_pitch_draws_smooth_line_edges(tmp_path):
             if 350 < sum(image.getpixel((x, y))) < 650:
                 blended += 1
     assert blended >= 20, blended
+
+
+def test_category_kit_boosts_a_detected_kit_and_falls_back_to_the_fixed_palette():
+    from footsight.render import category_kit, DEFAULT_SHORTS_COLOR
+
+    kits = {"team_a": ((156, 62, 45), (240, 240, 240))}
+    assert category_kit("team_a", kits) == (vivid_kit_color((156, 62, 45)), (240, 240, 240))
+    assert category_kit("goalkeeper", {}) == (GOALKEEPER_COLOR, DEFAULT_SHORTS_COLOR)

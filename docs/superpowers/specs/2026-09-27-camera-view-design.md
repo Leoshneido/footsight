@@ -1,7 +1,7 @@
 # Camera-Angle View — Design Spec
 
 Date: 2026-09-27
-Status: Approved section by section in chat; pending written-spec review
+Status: Approved and implemented (plan: docs/superpowers/plans/2026-09-27-camera-view.md)
 
 ## Context
 
@@ -82,12 +82,14 @@ scaled by `scale` once, at the start.
    - Anything beyond the horizon is excluded.
 3. **Ad boards.**
    - They stand 4 m outside the lines, 0.9 m tall, drawn only along the
-     sides facing away from the camera.
+     sides facing away from the camera (outward goes up the image at all,
+     so a goal line receding diagonally counts; refined during the build).
    - **Height on screen:** the homography only covers the ground plane, so
      the vertical pixels per metre at any image row come from a linear fit
      of detected player box height against foot row, taking a player as
      1.8 m. With fewer than 2 players, vertical px/m is taken as 2.0x the
-     ground px/m along the goal-line direction at that row. That constant is
+     ground px/m along the touchline direction at that row (the direction
+     that runs across the image; corrected during the build from "goal-line"). That constant is
      rough and will be checked against the fit on the 4 sample stills.
    - Navy board, with the logo repeated about every 10 m. Each copy is
      warped to its section's four corners.

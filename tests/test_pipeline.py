@@ -7,6 +7,14 @@ from footsight import pipeline
 
 
 @pytest.fixture(autouse=True)
+def no_camera_view():
+    """The camera view renders from the real still; these tests use fake
+    paths, so it is stubbed unless a test inspects it."""
+    with patch("footsight.pipeline.camera_view.render_camera_view") as mock:
+        yield mock
+
+
+@pytest.fixture(autouse=True)
 def no_kit_colors():
     """team_kit_colors reads the still from disk; these tests use fake
     paths, so it is stubbed to "no detected kits" unless a test says
@@ -342,3 +350,79 @@ def test_run_lets_the_user_add_a_ball_detection_missed(
 
     assert reviewed == [None]
     assert mock_render_pitch.call_args[1]["ball_position"] == (25.0, 30.0)
+
+
+
+def test_camera_output_path_sits_next_to_the_top_down_mockup():
+    assert pipeline.camera_output_path("out/mockup.png") == "out/mockup_camera.png"
+    assert pipeline.camera_output_path("mockup.png") == "mockup_camera.png"
+
+
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_also_writes_the_camera_view_with_the_same_people(
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch,
+    no_camera_view, no_kit_colors,
+):
+    """One run, two images: the camera view gets the same on-pitch people,
+    categories and kit colors as the top-down mockup, and the same ball."""
+    mock_compute_homography.return_value = np.eye(3)
+    mock_detect_players.return_value = [
+        ((0.0, 0.0, 10.0, 20.0), "player"),
+        ((30.0, 0.0, 40.0, 20.0), "goalkeeper"),
+        ((100.0, 0.0, 110.0, 20.0), "player"),  # off the pitch
+    ]
+    mock_classify_players.return_value = ["team_b"]
+    mock_detect_ball.return_value = (10.0, 10.0, 20.0, 20.0)
+    no_kit_colors.return_value = {"team_b": ((30, 30, 35), (200, 20, 40))}
+
+    pipeline.run(
+        "still.jpg", "out/mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+    )
+
+    no_camera_view.assert_called_once()
+    image_path, homography, people, ball_pixel, output_path = no_camera_view.call_args[0]
+    assert image_path == "still.jpg" and output_path == "out/mockup_camera.png"
+    assert [(box, category) for box, category, _, _ in people] == [
+        ((0.0, 0.0, 10.0, 20.0), "team_b"),
+        ((30.0, 0.0, 40.0, 20.0), "goalkeeper"),
+    ]
+    from footsight.render import category_kit
+    assert people[0][2] == category_kit("team_b", no_kit_colors.return_value)
+    assert [pose for *_, pose in people] == [None, None]  # no pose model given
+    assert ball_pixel == (15.0, 20.0)
+
+
+@patch("footsight.pipeline.pose.estimate_poses")
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_poses_only_the_people_on_the_pitch(
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch,
+    mock_estimate_poses, no_camera_view,
+):
+    mock_compute_homography.return_value = np.eye(3)
+    mock_detect_players.return_value = [
+        ((0.0, 0.0, 10.0, 20.0), "player"),
+        ((100.0, 0.0, 110.0, 20.0), "player"),  # off the pitch
+    ]
+    mock_classify_players.return_value = ["team_a"]
+    mock_detect_ball.return_value = None
+    pose = np.zeros((17, 3))
+    mock_estimate_poses.return_value = [pose]
+
+    pipeline.run(
+        "still.jpg", "mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+        pose_model="fake-pose-model",
+    )
+
+    mock_estimate_poses.assert_called_once_with("still.jpg", [(0.0, 0.0, 10.0, 20.0)], "fake-pose-model")
+    people = no_camera_view.call_args[0][2]
+    assert people[0][3] is pose

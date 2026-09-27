@@ -58,7 +58,7 @@ DEFAULT_SHORTS_COLOR = (30, 30, 30)
 # much. Hue and brightness are kept; greys and whites stay grey and white.
 KIT_SATURATION_BOOST = 1.5
 
-# Player icon: a small broadcast-style figure (see _draw_player_icon),
+# Player icon: a small broadcast-style figure (see draw_player_icon),
 # drawn in abstract units and sized so head-top to soles is a real player's
 # height on the pitch.
 SUPERSAMPLE = 4
@@ -184,7 +184,16 @@ def vivid_kit_color(color: tuple[int, int, int]) -> tuple[int, int, int]:
     return (int(round(red * 255)), int(round(green * 255)), int(round(blue * 255)))
 
 
-def _draw_player_icon(image, position_px, shirt, shorts, unit_px):
+def category_kit(category, kit_colors):
+    """(shirt, shorts) to draw a category in: its detected kit, saturation
+    boosted, or the fixed palette shirt with dark shorts."""
+    if category in kit_colors:
+        shirt, shorts = (vivid_kit_color(color) for color in kit_colors[category])
+        return shirt, shorts
+    return CATEGORY_COLORS[category], DEFAULT_SHORTS_COLOR
+
+
+def draw_player_icon(image, position_px, shirt, shorts, unit_px):
     """A small player as seen from a high broadcast camera: soft shadow,
     legs with white socks, shorts, shirt with arms, head with hair.
 
@@ -235,7 +244,7 @@ def _draw_player_icon(image, position_px, shirt, shorts, unit_px):
     image.paste(small, (int(round(px)) - tile_half_px, int(round(py)) - tile_half_px - feet_above_center), small)
 
 
-def _grass(image_width_px, image_height_px, margin_px, scale):
+def grass_image(image_width_px, image_height_px, margin_px, scale):
     """The mown, textured pitch surface as an RGB image."""
     columns = np.arange(image_width_px)
     band_width_px = (105.0 / GRASS_BANDS) * scale
@@ -255,7 +264,7 @@ def _grass(image_width_px, image_height_px, margin_px, scale):
     return Image.fromarray(grass.clip(0, 255).astype(np.uint8))
 
 
-def _draw_smooth_markings(image, pitch_length, pitch_width, margin_px, scale):
+def draw_markings(image, pitch_length, pitch_width, margin_px, scale):
     """Paint the pitch markings onto image with anti-aliased edges: they are
     drawn as a mask MARKINGS_SUPERSAMPLE times larger, then shrunk."""
     factor = MARKINGS_SUPERSAMPLE
@@ -289,7 +298,7 @@ class _MaskDraw:
         return draw_opaque
 
 
-def _draw_ball(image, position_px, radius_px):
+def draw_ball(image, position_px, radius_px):
     """The ball, anti-aliased the same way as the player icons."""
     factor = SUPERSAMPLE
     half = math.ceil(radius_px) + 2
@@ -323,20 +332,17 @@ def render_pitch(
     scale = (image_width_px - 2 * margin_px) / pitch_length
     image_height_px = int(pitch_width * scale) + 2 * margin_px
 
-    image = _grass(image_width_px, image_height_px, margin_px, scale)
-    _draw_smooth_markings(image, pitch_length, pitch_width, margin_px, scale)
+    image = grass_image(image_width_px, image_height_px, margin_px, scale)
+    draw_markings(image, pitch_length, pitch_width, margin_px, scale)
 
     icon_unit_px = player_height_m * ICON_SIZE_FACTOR * scale / ICON_HEIGHT_UNITS
     for position, category in player_positions:
         px, py = pitch_to_image_coords(position, pitch_length, pitch_width, image_width_px, margin_px)
-        if category in kit_colors:
-            shirt, shorts = (vivid_kit_color(color) for color in kit_colors[category])
-        else:
-            shirt, shorts = CATEGORY_COLORS[category], DEFAULT_SHORTS_COLOR
-        _draw_player_icon(image, (px, py), shirt, shorts, icon_unit_px)
+        shirt, shorts = category_kit(category, kit_colors)
+        draw_player_icon(image, (px, py), shirt, shorts, icon_unit_px)
 
     if ball_position is not None:
         px, py = pitch_to_image_coords(ball_position, pitch_length, pitch_width, image_width_px, margin_px)
-        _draw_ball(image, (px, py), ball_radius_m * scale)
+        draw_ball(image, (px, py), ball_radius_m * scale)
 
     image.save(output_path)

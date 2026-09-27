@@ -22,8 +22,14 @@ still.png
   -> team_classification.classify_players   only on-pitch role=="player" boxes -> team_a/team_b/officials
   -> team_classification.team_kit_colors    each team's (shirt, shorts) RGB, or {} -> fixed palette
   -> ball: ball_detection.find_ball, then optional ball_review (--pick-ball) to move/add/remove it
-  -> render.render_pitch(..., kit_colors)   PNG
+  -> render.render_pitch(..., kit_colors)   <out>.png  (top-down)
+  -> pose.estimate_poses(still, on-pitch boxes, pose_model)   17x3 joints or None per person
+  -> camera_view.render_camera_view(still, H, people, ball_pixel, <out>_camera.png)   camera angle
 ```
+
+`people = [(box, category, (shirt, shorts), pose_or_None)]`, built once from
+the on-pitch detections; both outputs share categories and kit colors
+(`render.category_kit`). `run(pose_model=None)` draws standing figures only.
 
 Category mapping: goalkeeper/referee render by detected role; a player the
 classifier labels `officials` renders as `referee`.
@@ -39,6 +45,9 @@ classifier labels `officials` renders as `referee`.
 | `ball_detection` | `find_ball(image_path, player_boxes) -> box \| None` | Classical HSV + 5x5 opening + circularity >= 0.65, searched near players. The pipeline projects the ball from its box's bottom edge (ground contact), like a player. |
 | `ball_picker` | `display_scale`, `to_source_pixel`, `handle_key(key, current, detected)`, `review_ball(image_path, detected)` | Enter accepts (incl. no ball), Esc keeps detection, Delete/Backspace removes. Clicks map back to full-resolution pixels. Window loop has no automated test; checked by hand on 12.00.14 (2026-09-26). |
 | `projection` | `bbox_to_ground_point`, `project_points[_indexed]`, `filter_to_pitch` | Pitch coords in meters, **centered at origin**, 105 x 68, 5 m margin. |
+| `pose` | `load_model(weights)`, `estimate_poses(image_path, boxes, model) -> [ndarray(17,3) \| None]`, plus `box_iou`, `crop_window`, `pick_person`, `is_reliable` | `yolo11m-pose.pt` on crops padded 35% sides / 20% top / 15% bottom, enlarged to 320 px, `conf=0.1`. `None` when < 10 joints > 0.3, IoU > 0.2 with another box, or skeleton height outside 0.6-1.4x the box. Missing weights -> `FileNotFoundError` naming the README step. |
+| `posed_figure` | `draw_posed_player(image, pose, height_px, shirt, shorts)` | Cartoon human on the joints, sizes as fractions of H: head 0.075, torso min width 0.2 (side-on), thigh 0.10, calf 0.075; sleeves in shirt color, bare forearms, shorts over the upper half of the thigh, white socks, dark boots, outline, foot shadow; 4x supersampled. |
+| `camera_view` | `render_camera_view(image_path, homography, people, ball_pixel, output_path, scale=1.5)`, `scaled_homography`, `vertical_scale`, `far_board_segments` | No broadcast pixels. Layers: seeded crowd dots, then top-down grass/markings warped by `inv(H)` (4.5 m apron, horizon-masked), then 0.9 m logo boards 4 m outside every side facing away from the camera (outward goes up the image), then shadows/players/ball sorted far to near. Vertical px/m from a box-height vs foot-row fit (fallback 2.0x the ground px/m along the touchline). Ball radius max(4 px, 0.16 m). |
 | `render` | `render_pitch(player_positions, output_path, ball_position=None, ..., image_width_px=4200, margin_px=160, player_height_m=1.8, ball_radius_m=0.33, kit_colors=None)` | `player_positions = [((x, y), category)]`; categories: team_a, team_b, goalkeeper, referee, assistant_referee. Pitch = 20 mown bands (5.25 m) with seeded grain + patch texture (identical output per input); markings 0.12 m wide, anti-aliased (3x mask). Icon = broadcast-style figure 15% above life size (1.8 m x 1.15) drawn 4x on its own tile, box-filtered down (flat areas keep exact colors), pasted so the figure's soles stand on the player's ground point (`ICON_FEET_UNITS`); the ball is drawn at its true position, so it only sits at a figure's feet when it did in the still. Detected kits are drawn with saturation x1.5 (`vivid_kit_color`); categories missing from `kit_colors` use the fixed shirt color + dark shorts. Procedural PIL, no assets. |
 
 ## Team split (the part most likely to break)

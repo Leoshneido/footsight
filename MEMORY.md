@@ -162,6 +162,35 @@ Decision log for footsight. Read at the start of every session before doing anyt
 **What was rejected:** Silhouette cut-outs from segmentation (effectively tracing the broadcast image, and blobby at 70-120 px). Fitting a full 3D body model (research-grade, far too heavy). The nano pose model (worse on overlaps; the size saving doesn't matter).
 **Issues to fix in the build:** Tangled/overlapping players produce one merged, odd skeleton (detect and fall back). Side-on torsos collapse to a sliver (need a minimum depth). Figures read as stick-like (need more mass in hips, thighs and chest).
 
+## 2026-09-27, Camera-angle view built: every run writes <out>.png and <out>_camera.png
+**What was decided:** Built per the spec and plan (`docs/superpowers/specs/2026-09-27-camera-view-design.md`, `docs/superpowers/plans/2026-09-27-camera-view.md`). The user approved them in advance and asked to skip review during the build.
+- New modules:
+  - `pose.py`: `yolo11m-pose` on padded, enlarged crops, with reliability rules;
+  - `posed_figure.py`: a cartoon human drawn on the joints;
+  - `camera_view.py`: seeded crowd dots, the pitch warped by `inv(H)` (horizon-masked), logo boards on the sides facing away from the camera, then players and ball sorted far to near, at 1.5x the still.
+- `render.py`'s shared helpers became public (`grass_image`, `draw_markings`, `draw_ball`, `draw_player_icon`) and gained `category_kit`.
+- `pipeline.run(pose_model=None)` builds the list of people once; `--pose-weights` was added.
+- The pose model is loaded before anything else, so a missing file stops the run immediately.
+- Weights live at `weights/ultralytics/yolo11m-pose.pt` (git-ignored); the README has the download step.
+**Why:** The user loved the camera-angle prototype and wanted human-like players that copy the real movement.
+**Changes found on the real stills:**
+- (1) Boards were missing behind the goal on the Bayern still: the "faces away" rule required outward to go clearly up the image; it now accepts any upward component, so diagonal goal lines count.
+- (2) The ball was too big near the camera: radius 0.3 m -> 0.16 m (real: 0.11 m).
+- (3) The spec's fallback board height said "goal-line direction"; it should be the touchline direction, which runs across the image. The spec was corrected.
+**Verification:**
+- 116 tests pass, all written test-first; two test-design mistakes were fixed along the way.
+- Real stills:
+  - Bayern: 12 of 13 posed.
+  - 11.58.59 and 11.59.40: 21 of 21 posed.
+  - 12.00.14: 19 of 22 posed.
+- Per run: poses about 1 s, camera render about 1.6 s, whole run about 15-16 s. Camera PNGs are 2.9-3.7 MB.
+**Open:**
+- No goal frames are drawn.
+- A sliver of stand can show in a near-side corner past the apron.
+- The crowd palette isn't team-tinted.
+- Tangled players fall back to standing figures.
+- Detection review and ball review are still hand-checked only.
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.

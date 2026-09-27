@@ -1,15 +1,25 @@
 import argparse
+from pathlib import Path
 
 from footsight import (
     ball_detection,
     ball_picker,
+    camera_view,
     detection_picker,
     pitch_calibration,
     player_detection,
+    pose,
     projection,
     render,
     team_classification,
 )
+
+
+def camera_output_path(output_path: str) -> str:
+    """Where the camera-angle view goes: next to the top-down mockup, with
+    "_camera" before the extension."""
+    path = Path(output_path)
+    return str(path.with_name(f"{path.stem}_camera{path.suffix}"))
 
 
 def run(
@@ -21,7 +31,11 @@ def run(
     ball_pixel: tuple[float, float] | None = None,
     review=None,
     ball_review=None,
+    pose_model=None,
 ) -> None:
+    """Write the top-down mockup to output_path and the camera-angle view
+    next to it (camera_output_path). Without a pose_model every player in
+    the camera view is drawn as the standing figure."""
     homography = pitch_calibration.compute_homography(input_path, weights_kp, weights_line)
     if homography is None:
         raise RuntimeError(f"Could not calibrate pitch from {input_path}")
@@ -61,6 +75,13 @@ def run(
         category = "referee" if label == team_classification.OFFICIALS_LABEL else label
         player_positions.append((point, category))
 
+    on_pitch_boxes = [box for _, (box, _) in on_pitch]
+    poses = pose.estimate_poses(input_path, on_pitch_boxes, pose_model) if pose_model is not None else [None] * len(on_pitch_boxes)
+    people = [
+        (box, category, render.category_kit(category, kit_colors), player_pose)
+        for box, (_, category), player_pose in zip(on_pitch_boxes, player_positions, poses)
+    ]
+
     ball_position = None
     # A hand-placed ball wins outright: it is only ever supplied because
     # detection got it wrong.
@@ -84,6 +105,9 @@ def run(
             ball_position = projected_ball[0]
 
     render.render_pitch(player_positions, output_path, ball_position=ball_position, kit_colors=kit_colors)
+    camera_view.render_camera_view(
+        input_path, homography, people, ball_center if ball_position is not None else None, camera_output_path(output_path)
+    )
 
 
 def main() -> None:
@@ -93,6 +117,7 @@ def main() -> None:
     parser.add_argument("--weights-kp", default=str(pitch_calibration.DEFAULT_WEIGHTS_KP))
     parser.add_argument("--weights-line", default=str(pitch_calibration.DEFAULT_WEIGHTS_LINE))
     parser.add_argument("--player-weights", default=str(player_detection.DEFAULT_WEIGHTS))
+    parser.add_argument("--pose-weights", default=str(pose.DEFAULT_POSE_WEIGHTS))
     parser.add_argument(
         "--pick-ball",
         action="store_true",
@@ -105,6 +130,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Load the pose model first: a missing file should stop the run before
+    # any calibration or review work is done.
+    pose_model = pose.load_model(args.pose_weights)
     detection_model = player_detection.load_model(args.player_weights)
     run(
         args.input_path,
@@ -114,6 +142,7 @@ def main() -> None:
         args.weights_line,
         ball_review=ball_picker.review_ball if args.pick_ball else None,
         review=detection_picker.review_detections if args.remove_detections else None,
+        pose_model=pose_model,
     )
 
 
