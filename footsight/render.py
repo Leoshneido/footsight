@@ -1,3 +1,4 @@
+import colorsys
 import math
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -27,6 +28,11 @@ CATEGORY_COLORS = {
 # Shorts for anything drawn from the fixed palette (keepers, officials,
 # and teams whose kit colors could not be read).
 DEFAULT_SHORTS_COLOR = (30, 30, 30)
+
+# Broadcast lighting washes kits out (Bayern's red reads brownish), so
+# detected kit colors are drawn with their saturation scaled up by this
+# much. Hue and brightness are kept; greys and whites stay grey and white.
+KIT_SATURATION_BOOST = 1.5
 
 # Player icon: a small broadcast-style figure (see _draw_player_icon).
 SUPERSAMPLE = 4
@@ -137,6 +143,13 @@ def _draw_pitch_markings(draw, pitch_length, pitch_width, image_width_px, margin
             )
 
 
+def vivid_kit_color(color: tuple[int, int, int]) -> tuple[int, int, int]:
+    """A detected kit color with its saturation boosted for display."""
+    hue, saturation, value = colorsys.rgb_to_hsv(*(channel / 255 for channel in color))
+    red, green, blue = colorsys.hsv_to_rgb(hue, min(1.0, saturation * KIT_SATURATION_BOOST), value)
+    return (int(round(red * 255)), int(round(green * 255)), int(round(blue * 255)))
+
+
 def _draw_player_icon(image, position_px, shirt, shorts, size=1.0):
     """A small player as seen from a high broadcast camera: soft shadow,
     legs with white socks, shorts, shirt with arms, head with hair.
@@ -209,7 +222,10 @@ def render_pitch(
 
     for position, category in player_positions:
         px, py = pitch_to_image_coords(position, pitch_length, pitch_width, image_width_px, margin_px)
-        shirt, shorts = kit_colors.get(category, (CATEGORY_COLORS[category], DEFAULT_SHORTS_COLOR))
+        if category in kit_colors:
+            shirt, shorts = (vivid_kit_color(color) for color in kit_colors[category])
+        else:
+            shirt, shorts = CATEGORY_COLORS[category], DEFAULT_SHORTS_COLOR
         _draw_player_icon(image, (px, py), shirt, shorts, size=dot_radius_px / 8)
 
     if ball_position is not None:

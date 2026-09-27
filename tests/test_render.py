@@ -8,6 +8,7 @@ from footsight.render import (
     GOALKEEPER_COLOR,
     LINE_COLOR,
     CENTER_CIRCLE_RADIUS,
+    vivid_kit_color,
 )
 
 
@@ -161,8 +162,8 @@ def test_render_pitch_draws_a_team_in_its_detected_kit(tmp_path):
     )
 
     near = _pixels_near(Image.open(output_path), (0.0, 0.0), radius=8, image_width_px=1050, margin_px=40)
-    assert (245, 130, 30) in near
-    assert (240, 240, 240) in near
+    assert vivid_kit_color((245, 130, 30)) in near
+    assert (240, 240, 240) in near  # white has no saturation to boost
     assert CATEGORY_COLORS["team_a"] not in near
 
 
@@ -190,3 +191,25 @@ def test_render_pitch_player_icons_are_big_enough_to_read(tmp_path):
     from PIL import ImageChops
     top, bottom = ImageChops.difference(image, empty).getbbox()[1::2]
     assert bottom - top >= 36
+
+
+def test_render_pitch_draws_detected_kits_more_vivid_than_the_dull_broadcast_color(tmp_path):
+    """Broadcast lighting washes kits out -- Bayern's red reads (156, 62, 45),
+    brownish. The drawn shirt keeps the hue but is more saturated."""
+    import colorsys
+
+    output_path = tmp_path / "mockup.png"
+    dull_red = (156, 62, 45)
+    render_pitch(
+        [((0.0, 0.0), "team_a")], str(output_path),
+        image_width_px=1050, margin_px=40,
+        kit_colors={"team_a": (dull_red, (240, 240, 240))},
+    )
+
+    shirt = Image.open(output_path).convert("RGB").getpixel(
+        tuple(int(round(v)) for v in pitch_to_image_coords((0.0, 0.0), image_width_px=1050, margin_px=40))
+    )
+    dull_h, _, dull_s = colorsys.rgb_to_hls(*(c / 255 for c in dull_red))
+    drawn_h, _, drawn_s = colorsys.rgb_to_hls(*(c / 255 for c in shirt))
+    assert drawn_s > dull_s + 0.1, shirt
+    assert abs(drawn_h - dull_h) < 0.02, shirt

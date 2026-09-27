@@ -107,7 +107,7 @@ Decision log for footsight. Read at the start of every session before doing anyt
 **What was rejected:** The tactics token (facing arrows need pose data, and it looks less like the footage). A fixed palette (user preferred real kits). Supersampling the whole mockup (would have meant touching all the pitch-marking code; per-icon tiles keep it isolated).
 **Verification:** 75 tests pass. All 4 stills rendered: Bayern red vs Bodø yellow, Feyenoord light blue with near-white shorts vs Barça purple with navy shorts. The two window loops (ball review, detection review) are still untested and need a real click-through by the user.
 **Update (same day):** Icons scaled up 1.6x (`ICON_UNIT_PX` 1.1 -> 1.8, about 40 px tall at the default 1050 px width) after the user found them too small; a render test pins the minimum height at 36 px.
-**Open:** Detected colors are dull under broadcast lighting (Bayern's red looks slightly brown). A display saturation boost is a possible tweak; not done.
+**Update (same day):** Detected kit colors are now drawn with saturation x1.5 (`render.KIT_SATURATION_BOOST`, via `vivid_kit_color`), with hue and brightness kept. The boost happens only at render time: `team_kit_colors` still returns the real colors, so the look-alike check runs on them. Bayern now reads red instead of brown. Barça's blended stripes stay a dark grey-purple (saturation 0.25 -> 0.38), because the blend itself is dark.
 
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.

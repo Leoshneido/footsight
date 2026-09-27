@@ -39,7 +39,7 @@ classifier labels `officials` renders as `referee`.
 | `ball_detection` | `find_ball(image_path, player_boxes) -> box \| None` | Classical HSV + 5x5 opening + circularity >= 0.65, searched near players. |
 | `ball_picker` | `display_scale`, `to_source_pixel`, `handle_key(key, current, detected)`, `review_ball(image_path, detected)` | Enter accepts (incl. no ball), Esc keeps detection, Delete/Backspace removes. Clicks map back to full-resolution pixels. Window loop untested. |
 | `projection` | `bbox_to_ground_point`, `project_points[_indexed]`, `filter_to_pitch` | Pitch coords in meters, **centered at origin**, 105 x 68, 5 m margin. |
-| `render` | `render_pitch(player_positions, output_path, ball_position=None, ..., kit_colors=None)` | `player_positions = [((x, y), category)]`; categories: team_a, team_b, goalkeeper, referee, assistant_referee. Icon = broadcast-style figure drawn 4x on its own tile, box-filtered down (flat areas keep exact colors), pasted centered on the shirt. Categories missing from `kit_colors` use the fixed shirt color + dark shorts. Procedural PIL, no assets. |
+| `render` | `render_pitch(player_positions, output_path, ball_position=None, ..., kit_colors=None)` | `player_positions = [((x, y), category)]`; categories: team_a, team_b, goalkeeper, referee, assistant_referee. Icon = broadcast-style figure drawn 4x on its own tile, box-filtered down (flat areas keep exact colors), pasted centered on the shirt. Detected kits are drawn with saturation x1.5 (`vivid_kit_color`); categories missing from `kit_colors` use the fixed shirt color + dark shorts. Procedural PIL, no assets. |
 
 ## Team split (the part most likely to break)
 
@@ -74,6 +74,6 @@ striped teams spread widely on the circle.
 
 - A striped player whose straight-line median falls deep in a hue gap could still be trimmed as an official (not yet seen).
 - No ball found on 12.00.14 (existing issue, not investigated; can now be added by hand with --pick-ball).
-- Broadcast lighting makes detected kit colors dull (Bayern red reads brownish); a saturation boost for display is a possible tweak.
+- Barça's striped kit renders as a dark grey-purple blend even after the x1.5 display saturation boost.
 - Future direction: angled/perspective mockup camera with flat icons (needs its own design pass).
 - Local `-v9` weights not confirmed identical to the Roboflow `setup.sh` download.
