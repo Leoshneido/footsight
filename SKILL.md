@@ -20,8 +20,9 @@ still.png
   -> review(image_path, detections)         optional: --remove-detections drops false boxes
   -> projection (box bottom-center -> pitch meters), filter_to_pitch   off-pitch people dropped here
   -> team_classification.classify_players   only on-pitch role=="player" boxes -> team_a/team_b/officials
-  -> ball: hand-placed pixel (--pick-ball) wins, else ball_detection.find_ball
-  -> render.render_pitch                    PNG
+  -> team_classification.team_kit_colors    each team's (shirt, shorts) RGB, or {} -> fixed palette
+  -> ball: ball_detection.find_ball, then optional ball_review (--pick-ball) to move/add/remove it
+  -> render.render_pitch(..., kit_colors)   PNG
 ```
 
 Category mapping: goalkeeper/referee render by detected role; a player the
@@ -34,11 +35,11 @@ classifier labels `officials` renders as `referee`.
 | `pitch_calibration` | `compute_homography(image_path, weights_kp, weights_line, device="cpu") -> ndarray \| None` | PnLCalib (vendored submodule) runs **only as a subprocess** via `scripts/pnlcalib_infer.py`; never import it. |
 | `player_detection` | `load_model(weights)`, `detect_players(image_path, model, confidence=0.7, image_size=1280) -> list[(box, role)]` | Ultralytics YOLO + Roboflow `football-player-detection-v9.pt`. Model's own `ball` class is dropped. |
 | `detection_picker` | `detection_at(point, detections)`, `drop_detections(detections, removed)`, `review_detections(image_path, detections)` | Smallest box wins on overlap. Window loop is untested (needs a display). |
-| `team_classification` | `classify_players(image_path, player_boxes) -> list[str]` | See "Team split" below. `<2` players -> all `team_a`. |
+| `team_classification` | `classify_players(image_path, player_boxes) -> list[str]`, `team_kit_colors(image_path, player_boxes, labels) -> {team: (shirt, shorts)}` | See "Team split" below. `<2` players -> all `team_a`. Kit colors sample shirt at 25-45% and shorts at 50-62% of box height (grass masked); `{}` if a team is empty or the shirts are < 60 RGB apart. |
 | `ball_detection` | `find_ball(image_path, player_boxes) -> box \| None` | Classical HSV + 5x5 opening + circularity >= 0.65, searched near players. |
-| `ball_picker` | `display_scale`, `to_source_pixel`, `pick_ball_pixel(image_path)` | Clicks map back to full-resolution pixels (homography space). |
+| `ball_picker` | `display_scale`, `to_source_pixel`, `handle_key(key, current, detected)`, `review_ball(image_path, detected)` | Enter accepts (incl. no ball), Esc keeps detection, Delete/Backspace removes. Clicks map back to full-resolution pixels. Window loop untested. |
 | `projection` | `bbox_to_ground_point`, `project_points[_indexed]`, `filter_to_pitch` | Pitch coords in meters, **centered at origin**, 105 x 68, 5 m margin. |
-| `render` | `render_pitch(player_positions, output_path, ball_position=None, ...)` | `player_positions = [((x, y), category)]`; categories: team_a, team_b, goalkeeper, referee, assistant_referee. Procedural PIL drawing, no assets. |
+| `render` | `render_pitch(player_positions, output_path, ball_position=None, ..., kit_colors=None)` | `player_positions = [((x, y), category)]`; categories: team_a, team_b, goalkeeper, referee, assistant_referee. Icon = broadcast-style figure drawn 4x on its own tile, box-filtered down (flat areas keep exact colors), pasted centered on the shirt. Categories missing from `kit_colors` use the fixed shirt color + dark shorts. Procedural PIL, no assets. |
 
 ## Team split (the part most likely to break)
 
@@ -72,6 +73,7 @@ striped teams spread widely on the circle.
 ## Open items
 
 - A striped player whose straight-line median falls deep in a hue gap could still be trimmed as an official (not yet seen).
-- No ball found on 12.00.14 (existing issue, not investigated).
+- No ball found on 12.00.14 (existing issue, not investigated; can now be added by hand with --pick-ball).
+- Broadcast lighting makes detected kit colors dull (Bayern red reads brownish); a saturation boost for display is a possible tweak.
 - Future direction: angled/perspective mockup camera with flat icons (needs its own design pass).
 - Local `-v9` weights not confirmed identical to the Roboflow `setup.sh` download.

@@ -1,6 +1,6 @@
 import math
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 PITCH_COLOR = (34, 139, 34)
 LINE_COLOR = (255, 255, 255)
@@ -23,6 +23,21 @@ CATEGORY_COLORS = {
     "referee": REFEREE_COLOR,
     "assistant_referee": ASSISTANT_REFEREE_COLOR,
 }
+
+# Shorts for anything drawn from the fixed palette (keepers, officials,
+# and teams whose kit colors could not be read).
+DEFAULT_SHORTS_COLOR = (30, 30, 30)
+
+# Player icon: a small broadcast-style figure (see _draw_player_icon).
+SUPERSAMPLE = 4
+ICON_UNIT_PX = 1.8
+ICON_TILE_HALF_PX = 26
+ICON_SKIN_COLOR = (205, 150, 115)
+ICON_HAIR_COLOR = (40, 28, 20)
+ICON_SOCK_COLOR = (250, 250, 250)
+ICON_OUTLINE_COLOR = (0, 0, 0)
+ICON_SHADOW_COLOR = (10, 40, 10)
+ICON_SHADOW_ALPHA = 110
 
 # Standard FIFA pitch marking dimensions, in meters.
 CENTER_CIRCLE_RADIUS = 9.15
@@ -122,29 +137,51 @@ def _draw_pitch_markings(draw, pitch_length, pitch_width, image_width_px, margin
             )
 
 
-def _draw_player_icon(draw, position_px, color, head_radius_px=4, body_half_width_px=6, body_height_px=9):
+def _draw_player_icon(image, position_px, shirt, shorts, size=1.0):
+    """A small player as seen from a high broadcast camera: soft shadow,
+    legs with white socks, shorts, shirt with arms, head with hair.
+
+    Drawn SUPERSAMPLE times larger on its own transparent tile and shrunk
+    down (box filter, so flat areas keep their exact color), then pasted
+    centered on the shirt at position_px.
+    """
+    unit = ICON_UNIT_PX * size * SUPERSAMPLE
+    tile_half = int(ICON_TILE_HALF_PX * size) * SUPERSAMPLE
+    tile_size = tile_half * 2
+    tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    cx, cy = tile_half, tile_half
+
+    def box(x_a, y_a, x_b, y_b):
+        return [cx + x_a * unit, cy + y_a * unit, cx + x_b * unit, cy + y_b * unit]
+
+    shadow = Image.new("L", tile.size, 0)
+    ImageDraw.Draw(shadow).ellipse(box(-3.0, 7.0, 11.0, 12.0), fill=ICON_SHADOW_ALPHA)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(unit * 1.5))
+    tile.paste((*ICON_SHADOW_COLOR, 255), (0, 0), shadow)
+
+    draw = ImageDraw.Draw(tile)
+    outline = max(1, int(unit * 0.4))
+    for side in (-1, 1):
+        draw.line(
+            [(cx + side * 2.0 * unit, cy + 4.0 * unit), (cx + side * 2.5 * unit, cy + 10.0 * unit)],
+            fill=ICON_SKIN_COLOR, width=int(unit * 2.2),
+        )
+        draw.ellipse(box(side * 2.5 - 1.6, 9.0, side * 2.5 + 1.6, 11.5), fill=ICON_SOCK_COLOR)
+    draw.rounded_rectangle(box(-3.8, 1.0, 3.8, 5.0), radius=int(unit), fill=shorts, outline=ICON_OUTLINE_COLOR, width=outline)
+    for side in (-1, 1):
+        draw.line(
+            [(cx + side * 4.0 * unit, cy - 4.5 * unit), (cx + side * 6.0 * unit, cy + 1.0 * unit)],
+            fill=shirt, width=int(unit * 2.4),
+        )
+        draw.ellipse(box(side * 6.0 - 1.3, 0.2, side * 6.0 + 1.3, 2.6), fill=ICON_SKIN_COLOR)
+    draw.rounded_rectangle(box(-4.5, -6.0, 4.5, 2.0), radius=int(unit * 2), fill=shirt, outline=ICON_OUTLINE_COLOR, width=outline)
+    draw.ellipse(box(-2.6, -11.0, 2.6, -5.8), fill=ICON_SKIN_COLOR, outline=ICON_OUTLINE_COLOR, width=max(1, int(unit * 0.3)))
+    draw.chord(box(-2.6, -11.0, 2.6, -5.8), 180, 360, fill=ICON_HAIR_COLOR)
+
+    small = tile.resize((tile_size // SUPERSAMPLE, tile_size // SUPERSAMPLE), Image.BOX)
     px, py = position_px
-    total_height = head_radius_px * 2 + body_height_px
-    top_y = py - total_height / 2
-
-    head_center_y = top_y + head_radius_px
-    draw.ellipse(
-        [px - head_radius_px, head_center_y - head_radius_px, px + head_radius_px, head_center_y + head_radius_px],
-        fill=color,
-    )
-
-    body_top_y = top_y + head_radius_px * 2
-    body_bottom_y = body_top_y + body_height_px
-    taper_px = body_half_width_px / 3
-    draw.polygon(
-        [
-            (px - body_half_width_px, body_top_y),
-            (px + body_half_width_px, body_top_y),
-            (px + body_half_width_px - taper_px, body_bottom_y),
-            (px - body_half_width_px + taper_px, body_bottom_y),
-        ],
-        fill=color,
-    )
+    offset = int(ICON_TILE_HALF_PX * size)
+    image.paste(small, (int(round(px)) - offset, int(round(py)) - offset), small)
 
 
 def render_pitch(
@@ -157,7 +194,11 @@ def render_pitch(
     margin_px: int = 40,
     dot_radius_px: int = 8,
     ball_radius_px: int = 6,
+    kit_colors: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] | None = None,
 ) -> None:
+    """kit_colors maps a category to its detected (shirt, shorts) colors;
+    any category not in it is drawn in its fixed CATEGORY_COLORS shirt."""
+    kit_colors = kit_colors or {}
     scale = (image_width_px - 2 * margin_px) / pitch_length
     image_height_px = int(pitch_width * scale) + 2 * margin_px
 
@@ -168,7 +209,8 @@ def render_pitch(
 
     for position, category in player_positions:
         px, py = pitch_to_image_coords(position, pitch_length, pitch_width, image_width_px, margin_px)
-        _draw_player_icon(draw, (px, py), CATEGORY_COLORS[category], head_radius_px=dot_radius_px // 2)
+        shirt, shorts = kit_colors.get(category, (CATEGORY_COLORS[category], DEFAULT_SHORTS_COLOR))
+        _draw_player_icon(image, (px, py), shirt, shorts, size=dot_radius_px / 8)
 
     if ball_position is not None:
         px, py = pitch_to_image_coords(ball_position, pitch_length, pitch_width, image_width_px, margin_px)

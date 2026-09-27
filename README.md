@@ -25,8 +25,9 @@ The local copy was named `-v9`; not yet confirmed to be the identical file.
 
 Options:
 
-- `--pick-ball` -- click the ball on the still yourself instead of detecting
-  it. Enter accepts, Esc cancels.
+- `--pick-ball` -- review the ball on the still: the detected ball (if any)
+  is circled; click to move it or add one, Delete/Backspace to remove it.
+  Enter accepts, Esc keeps what detection found.
 - `--remove-detections` -- shows every detected box on the still; click false
   ones (e.g. a broadcaster watermark) to remove them before the team split.
   Click again to restore. Enter accepts, Esc keeps everything.
@@ -36,7 +37,8 @@ Options:
 Main wide/tactical broadcast camera stills only. Detects players,
 goalkeepers and referees; splits outfield players into two teams by jersey
 color; finds the ball (or you place it by hand); and draws everything on a
-broadcast-style 2D pitch.
+broadcast-style 2D pitch, with each team drawn in the shirt and shorts colors
+read off the still.
 
 Known limits: close-up and replay camera angles aren't supported, and
 broadcast watermarks are sometimes detected as players -- remove them with

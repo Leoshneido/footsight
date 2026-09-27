@@ -20,6 +20,7 @@ def run(
     weights_line: str,
     ball_pixel: tuple[float, float] | None = None,
     review=None,
+    ball_review=None,
 ) -> None:
     homography = pitch_calibration.compute_homography(input_path, weights_kp, weights_line)
     if homography is None:
@@ -43,7 +44,9 @@ def run(
     ]
 
     player_boxes = [box for _, (box, role) in on_pitch if role == player_detection.PLAYER_ROLE]
-    team_labels = iter(team_classification.classify_players(input_path, player_boxes))
+    player_labels = team_classification.classify_players(input_path, player_boxes)
+    kit_colors = team_classification.team_kit_colors(input_path, player_boxes, player_labels)
+    team_labels = iter(player_labels)
 
     # Goalkeepers and officials are rendered by the role the detector gave
     # them; only outfield players need a team worked out from jersey color.
@@ -68,13 +71,17 @@ def run(
         ball_center = projection.bbox_to_center_point(ball_box)
     else:
         ball_center = None
+    # The user reviews what detection found: move it, add a missed ball, or
+    # remove a wrong one (None).
+    if ball_review is not None:
+        ball_center = ball_review(input_path, ball_center)
 
     if ball_center is not None:
         projected_ball = projection.filter_to_pitch(projection.project_points(homography, [ball_center]))
         if projected_ball:
             ball_position = projected_ball[0]
 
-    render.render_pitch(player_positions, output_path, ball_position=ball_position)
+    render.render_pitch(player_positions, output_path, ball_position=ball_position, kit_colors=kit_colors)
 
 
 def main() -> None:
@@ -87,7 +94,7 @@ def main() -> None:
     parser.add_argument(
         "--pick-ball",
         action="store_true",
-        help="Click the ball on the still yourself instead of detecting it",
+        help="Review the ball on the still: click to place or move it, Delete to remove it",
     )
     parser.add_argument(
         "--remove-detections",
@@ -96,8 +103,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    ball_pixel = ball_picker.pick_ball_pixel(args.input_path) if args.pick_ball else None
-
     detection_model = player_detection.load_model(args.player_weights)
     run(
         args.input_path,
@@ -105,7 +110,7 @@ def main() -> None:
         detection_model,
         args.weights_kp,
         args.weights_line,
-        ball_pixel=ball_pixel,
+        ball_review=ball_picker.review_ball if args.pick_ball else None,
         review=detection_picker.review_detections if args.remove_detections else None,
     )
 

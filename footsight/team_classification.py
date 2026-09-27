@@ -21,6 +21,15 @@ GRASS_HUE_RANGE = (40, 60)
 # OpenCV stores hue as 0-179, so 180 wraps back to 0.
 HUE_PERIOD = 180
 
+# Where the drawn kit colors are sampled, as fractions of the box height.
+# Higher than the jersey-hue torso window (0.3-0.6), which reaches into the
+# shorts; measured on the sample stills, lower shorts bands mostly caught
+# thighs and grass between the legs.
+SHIRT_BAND = (0.25, 0.45)
+SHORTS_BAND = (0.5, 0.62)
+# Below this RGB distance two teams' shirts would look alike on the mockup.
+KIT_MIN_DISTANCE = 60.0
+
 
 def _jersey_hues(image_bgr: np.ndarray, player_box: tuple[float, float, float, float]) -> np.ndarray:
     """Hues of the pixels in a player's torso -- the middle third of their box
@@ -129,3 +138,61 @@ def classify_players(
         cluster = cluster_indices[position]
         labels[index] = TEAM_A_LABEL if cluster == first_cluster else TEAM_B_LABEL
     return labels
+
+
+def _band_color(
+    image_bgr: np.ndarray,
+    player_box: tuple[float, float, float, float],
+    band: tuple[float, float],
+) -> np.ndarray:
+    """Median RGB color of a horizontal band of the box (middle half of its
+    width), with pitch-green pixels left out."""
+    x1, y1, x2, y2 = (int(v) for v in player_box)
+    height, width = y2 - y1, x2 - x1
+    top, bottom = y1 + int(height * band[0]), y1 + int(height * band[1])
+    region = image_bgr[top:bottom, x1 + int(width * 0.25):x1 + int(width * 0.75)]
+    if region.size == 0:
+        region = image_bgr[y1:y2, x1:x2]
+
+    pixels = region.reshape(-1, 3)
+    hues = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)[..., 0].reshape(-1)
+    low, high = GRASS_HUE_RANGE
+    not_grass = pixels[(hues < low) | (hues > high)]
+    if len(not_grass) > 0:
+        pixels = not_grass
+    blue, green, red = np.median(pixels, axis=0)
+    return np.array([red, green, blue])
+
+
+def team_kit_colors(
+    image_path: str,
+    player_boxes: list[tuple[float, float, float, float]],
+    labels: list[str],
+) -> dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]]:
+    """Each team's (shirt, shorts) RGB color, read off the still: the median
+    across the team's players of each player's median band color.
+
+    Returns {} -- meaning "use the fixed palette" -- when a team has no
+    players or when the two shirts would look alike on the mockup. A
+    striped kit comes out as the blend of its stripes.
+    """
+    image = Image.open(image_path).convert("RGB")
+    image_bgr = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+    colors = {}
+    for team in (TEAM_A_LABEL, TEAM_B_LABEL):
+        boxes = [box for box, label in zip(player_boxes, labels) if label == team]
+        if not boxes:
+            return {}
+        shirt = np.median([_band_color(image_bgr, box, SHIRT_BAND) for box in boxes], axis=0)
+        shorts = np.median([_band_color(image_bgr, box, SHORTS_BAND) for box in boxes], axis=0)
+        colors[team] = (shirt, shorts)
+
+    shirt_a, shirt_b = colors[TEAM_A_LABEL][0], colors[TEAM_B_LABEL][0]
+    if np.linalg.norm(shirt_a - shirt_b) < KIT_MIN_DISTANCE:
+        return {}
+
+    return {
+        team: tuple(tuple(int(round(channel)) for channel in color) for color in pair)
+        for team, pair in colors.items()
+    }

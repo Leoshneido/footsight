@@ -1,6 +1,12 @@
 from PIL import Image, ImageDraw
 
-from footsight.team_classification import classify_players, OFFICIALS_LABEL, TEAM_A_LABEL, TEAM_B_LABEL
+from footsight.team_classification import (
+    classify_players,
+    team_kit_colors,
+    OFFICIALS_LABEL,
+    TEAM_A_LABEL,
+    TEAM_B_LABEL,
+)
 
 
 def _make_test_image(path, boxes_and_colors):
@@ -222,3 +228,83 @@ def test_classify_players_handles_no_players(tmp_path):
     _make_test_image(image_path, [])
 
     assert classify_players(str(image_path), []) == []
+
+
+def _draw_kit(boxes, shirt, shorts):
+    """Shirt over the top 48% of each box, shorts over the next 17% --
+    covering where the shirt and shorts bands are sampled."""
+    drawn = []
+    for x1, y1, x2, y2 in boxes:
+        height = y2 - y1
+        drawn.append(((x1, y1, x2, y1 + height * 0.48), shirt))
+        drawn.append(((x1, y1 + height * 0.48, x2, y1 + height * 0.65), shorts))
+    return drawn
+
+
+def _close(color, expected, tolerance=12):
+    return all(abs(a - b) <= tolerance for a, b in zip(color, expected))
+
+
+def test_team_kit_colors_samples_each_teams_shirt_and_shorts(tmp_path):
+    """The mockup draws each team in the kit it actually wears (orange
+    Netherlands, not a fixed blue), so the shirt and shorts colors are read
+    off the still."""
+    image_path = tmp_path / "still.png"
+    team_a_boxes = [(10.0, 10.0, 30.0, 70.0), (50.0, 10.0, 70.0, 70.0)]
+    team_b_boxes = [(150.0, 10.0, 170.0, 70.0), (190.0, 10.0, 210.0, 70.0)]
+    _make_test_image(
+        image_path,
+        _draw_kit(team_a_boxes, (245, 130, 30), (240, 240, 240))  # orange shirt, white shorts
+        + _draw_kit(team_b_boxes, (30, 30, 35), (200, 20, 40)),  # black shirt, red shorts
+    )
+
+    colors = team_kit_colors(
+        str(image_path),
+        team_a_boxes + team_b_boxes,
+        [TEAM_A_LABEL, TEAM_A_LABEL, TEAM_B_LABEL, TEAM_B_LABEL],
+    )
+
+    shirt_a, shorts_a = colors[TEAM_A_LABEL]
+    shirt_b, shorts_b = colors[TEAM_B_LABEL]
+    assert _close(shirt_a, (245, 130, 30)), shirt_a
+    assert _close(shorts_a, (240, 240, 240)), shorts_a
+    assert _close(shirt_b, (30, 30, 35)), shirt_b
+    assert _close(shorts_b, (200, 20, 40)), shorts_b
+
+
+def test_team_kit_colors_ignores_officials(tmp_path):
+    image_path = tmp_path / "still.png"
+    boxes = [(10.0, 10.0, 30.0, 70.0), (150.0, 10.0, 170.0, 70.0), (300.0, 10.0, 320.0, 70.0)]
+    _make_test_image(
+        image_path,
+        _draw_kit([boxes[0]], (245, 130, 30), (240, 240, 240))
+        + _draw_kit([boxes[1]], (30, 30, 35), (30, 30, 35))
+        + _draw_kit([boxes[2]], (230, 230, 0), (20, 20, 20)),  # referee
+    )
+
+    colors = team_kit_colors(str(image_path), boxes, [TEAM_A_LABEL, TEAM_B_LABEL, OFFICIALS_LABEL])
+
+    assert set(colors) == {TEAM_A_LABEL, TEAM_B_LABEL}
+
+
+def test_team_kit_colors_gives_up_when_the_two_kits_would_look_alike(tmp_path):
+    """Two dark kits that the jersey hue can still split may look the same
+    once drawn; then the mockup falls back to its fixed, clearly different
+    team colors rather than showing two near-identical teams."""
+    image_path = tmp_path / "still.png"
+    boxes = [(10.0, 10.0, 30.0, 70.0), (150.0, 10.0, 170.0, 70.0)]
+    _make_test_image(
+        image_path,
+        _draw_kit([boxes[0]], (35, 30, 30), (20, 20, 20))
+        + _draw_kit([boxes[1]], (30, 30, 45), (20, 20, 20)),
+    )
+
+    assert team_kit_colors(str(image_path), boxes, [TEAM_A_LABEL, TEAM_B_LABEL]) == {}
+
+
+def test_team_kit_colors_gives_up_when_a_team_has_no_players(tmp_path):
+    image_path = tmp_path / "still.png"
+    boxes = [(10.0, 10.0, 30.0, 70.0)]
+    _make_test_image(image_path, _draw_kit(boxes, (245, 130, 30), (240, 240, 240)))
+
+    assert team_kit_colors(str(image_path), boxes, [TEAM_A_LABEL]) == {}

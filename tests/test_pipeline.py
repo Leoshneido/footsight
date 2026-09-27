@@ -6,6 +6,15 @@ import pytest
 from footsight import pipeline
 
 
+@pytest.fixture(autouse=True)
+def no_kit_colors():
+    """team_kit_colors reads the still from disk; these tests use fake
+    paths, so it is stubbed to "no detected kits" unless a test says
+    otherwise."""
+    with patch("footsight.pipeline.team_classification.team_kit_colors", return_value={}) as mock:
+        yield mock
+
+
 @patch("footsight.pipeline.render.render_pitch")
 @patch("footsight.pipeline.ball_detection.find_ball")
 @patch("footsight.pipeline.team_classification.classify_players")
@@ -31,7 +40,7 @@ def test_run_wires_stages_together(
     rendered_points, output_path = mock_render_pitch.call_args[0]
     assert output_path == "mockup.png"
     assert rendered_points == [((5.0, 20.0), "team_a")]
-    assert mock_render_pitch.call_args[1] == {"ball_position": None}
+    assert mock_render_pitch.call_args[1] == {"ball_position": None, "kit_colors": {}}
 
 
 @patch("footsight.pipeline.render.render_pitch")
@@ -91,7 +100,7 @@ def test_run_includes_ball_position_when_ball_detected(
         detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
     )
 
-    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=(15.0, 15.0))
+    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=(15.0, 15.0), kit_colors={})
 
 
 @patch("footsight.pipeline.render.render_pitch")
@@ -116,7 +125,7 @@ def test_run_uses_a_hand_placed_ball_pixel_instead_of_detecting_one(
     )
 
     mock_detect_ball.assert_not_called()
-    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=(25.0, 30.0))
+    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=(25.0, 30.0), kit_colors={})
 
 
 @patch("footsight.pipeline.pitch_calibration.compute_homography")
@@ -148,7 +157,7 @@ def test_run_with_no_players_renders_empty_pitch(
         detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
     )
 
-    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=None)
+    mock_render_pitch.assert_called_once_with([], "mockup.png", ball_position=None, kit_colors={})
 
 
 @patch("footsight.pipeline.render.render_pitch")
@@ -243,3 +252,91 @@ def test_run_leaves_off_pitch_detections_out_of_the_team_split(
     mock_classify_players.assert_called_once_with("still.jpg", [(0.0, 0.0, 10.0, 20.0)])
     rendered_points, _ = mock_render_pitch.call_args[0]
     assert rendered_points == [((5.0, 20.0), "team_a")]
+
+
+
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_draws_teams_in_the_kit_colors_read_off_the_still(
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch,
+    no_kit_colors,
+):
+    mock_compute_homography.return_value = np.eye(3)
+    mock_detect_players.return_value = [
+        ((0.0, 0.0, 10.0, 20.0), "player"),
+        ((30.0, 0.0, 40.0, 20.0), "player"),
+        ((100.0, 0.0, 110.0, 20.0), "player"),  # off the pitch
+    ]
+    mock_classify_players.return_value = ["team_a", "team_b"]
+    mock_detect_ball.return_value = None
+    kits = {"team_a": ((245, 130, 30), (240, 240, 240)), "team_b": ((30, 30, 35), (30, 30, 35))}
+    no_kit_colors.return_value = kits
+
+    pipeline.run(
+        "still.jpg", "mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+    )
+
+    no_kit_colors.assert_called_once_with(
+        "still.jpg", [(0.0, 0.0, 10.0, 20.0), (30.0, 0.0, 40.0, 20.0)], ["team_a", "team_b"]
+    )
+    assert mock_render_pitch.call_args[1]["kit_colors"] == kits
+
+
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_lets_the_user_remove_a_wrongly_detected_ball(
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch
+):
+    mock_compute_homography.return_value = np.eye(3)
+    mock_detect_players.return_value = []
+    mock_classify_players.return_value = []
+    mock_detect_ball.return_value = (10.0, 10.0, 20.0, 20.0)  # center = (15.0, 15.0)
+    reviewed = []
+
+    def ball_review(image_path, detected):
+        reviewed.append((image_path, detected))
+        return None
+
+    pipeline.run(
+        "still.jpg", "mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+        ball_review=ball_review,
+    )
+
+    assert reviewed == [("still.jpg", (15.0, 15.0))]
+    assert mock_render_pitch.call_args[1]["ball_position"] is None
+
+
+@patch("footsight.pipeline.render.render_pitch")
+@patch("footsight.pipeline.ball_detection.find_ball")
+@patch("footsight.pipeline.team_classification.classify_players")
+@patch("footsight.pipeline.player_detection.detect_players")
+@patch("footsight.pipeline.pitch_calibration.compute_homography")
+def test_run_lets_the_user_add_a_ball_detection_missed(
+    mock_compute_homography, mock_detect_players, mock_classify_players, mock_detect_ball, mock_render_pitch
+):
+    mock_compute_homography.return_value = np.eye(3)
+    mock_detect_players.return_value = []
+    mock_classify_players.return_value = []
+    mock_detect_ball.return_value = None
+    reviewed = []
+
+    def ball_review(image_path, detected):
+        reviewed.append(detected)
+        return (25.0, 30.0)
+
+    pipeline.run(
+        "still.jpg", "mockup.png",
+        detection_model="fake-model", weights_kp="kp.pt", weights_line="lines.pt",
+        ball_review=ball_review,
+    )
+
+    assert reviewed == [None]
+    assert mock_render_pitch.call_args[1]["ball_position"] == (25.0, 30.0)

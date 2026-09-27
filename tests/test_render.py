@@ -139,3 +139,54 @@ def test_render_pitch_draws_goalkeepers_in_their_own_color(tmp_path):
     image = Image.open(output_path)
     assert _any_pixel_near(image, (-40.0, 0.0), GOALKEEPER_COLOR, image_width_px=1050, margin_px=40)
     assert GOALKEEPER_COLOR not in (CATEGORY_COLORS["team_a"], CATEGORY_COLORS["team_b"], CATEGORY_COLORS["referee"])
+
+
+def _pixels_near(image, point, radius, **kwargs):
+    px, py = pitch_to_image_coords(point, **kwargs)
+    return {
+        image.getpixel((int(round(px)) + dx, int(round(py)) + dy))
+        for dx in range(-radius, radius + 1)
+        for dy in range(-radius, radius + 1)
+    }
+
+
+def test_render_pitch_draws_a_team_in_its_detected_kit(tmp_path):
+    """Shirt and shorts both come from the still, so an orange team with
+    white shorts is drawn that way instead of in the fixed team color."""
+    output_path = tmp_path / "mockup.png"
+    render_pitch(
+        [((0.0, 0.0), "team_a")], str(output_path),
+        image_width_px=1050, margin_px=40,
+        kit_colors={"team_a": ((245, 130, 30), (240, 240, 240))},
+    )
+
+    near = _pixels_near(Image.open(output_path), (0.0, 0.0), radius=8, image_width_px=1050, margin_px=40)
+    assert (245, 130, 30) in near
+    assert (240, 240, 240) in near
+    assert CATEGORY_COLORS["team_a"] not in near
+
+
+def test_render_pitch_keeps_the_fixed_color_for_categories_without_a_detected_kit(tmp_path):
+    output_path = tmp_path / "mockup.png"
+    render_pitch(
+        [((0.0, 0.0), "team_a"), ((20.0, 0.0), "goalkeeper")], str(output_path),
+        image_width_px=1050, margin_px=40,
+        kit_colors={"team_a": ((245, 130, 30), (240, 240, 240))},
+    )
+
+    near_keeper = _pixels_near(Image.open(output_path), (20.0, 0.0), radius=8, image_width_px=1050, margin_px=40)
+    assert GOALKEEPER_COLOR in near_keeper
+
+
+def test_render_pitch_player_icons_are_big_enough_to_read(tmp_path):
+    """At the default 1050 px mockup width the figure has to be large enough
+    to make out shirt and shorts -- ~25 px tall was too small to read."""
+    output_path = tmp_path / "mockup.png"
+    render_pitch([((0.0, 10.0), "team_a")], str(output_path), image_width_px=1050, margin_px=40)
+
+    image = Image.open(output_path).convert("RGB")
+    render_pitch([], str(tmp_path / "empty.png"), image_width_px=1050, margin_px=40)
+    empty = Image.open(tmp_path / "empty.png").convert("RGB")
+    from PIL import ImageChops
+    top, bottom = ImageChops.difference(image, empty).getbbox()[1::2]
+    assert bottom - top >= 36
