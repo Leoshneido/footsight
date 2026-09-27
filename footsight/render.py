@@ -4,21 +4,29 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-# 2100 px wide gives ~18.5 px per meter: enough for real-size players
-# (~33 px tall) to stay readable.
-DEFAULT_IMAGE_WIDTH_PX = 2100
-DEFAULT_MARGIN_PX = 80
+# 4200 px wide gives ~37 px per meter: high enough definition that the
+# figures (~76 px tall) show their detail.
+DEFAULT_IMAGE_WIDTH_PX = 4200
+DEFAULT_MARGIN_PX = 160
+
+# Markings are sized in meters so they scale with the image, and drawn
+# MARKINGS_SUPERSAMPLE times larger then shrunk, so edges are smooth.
+LINE_WIDTH_M = 0.12
+SPOT_RADIUS_M = 0.15
+MARKINGS_SUPERSAMPLE = 3
+# Larger than a real ball (0.11 m) so it stays visible.
+BALL_RADIUS_M = 0.33
 
 # Mown grass: alternating light and dark bands of equal width from goal line
 # to goal line (continuing into the margin), with a seeded texture -- fine
 # grain plus larger faint patches -- so every render of the same input is
 # identical.
-GRASS_LIGHT_COLOR = (86, 160, 62)
-GRASS_DARK_COLOR = (70, 142, 50)
+GRASS_LIGHT_COLOR = (51, 95, 37)
+GRASS_DARK_COLOR = (42, 85, 30)
 GRASS_BANDS = 20
-GRASS_GRAIN_SIGMA = 6.0
-GRASS_PATCH_CELL_PX = 40
-GRASS_PATCH_STRENGTH = 0.14
+GRASS_GRAIN_SIGMA = 1.2
+GRASS_PATCH_CELL_M = 2.2
+GRASS_PATCH_STRENGTH = 0.028
 GRASS_SEED = 7
 LINE_COLOR = (255, 255, 255)
 BALL_FILL_COLOR = (255, 255, 255)
@@ -55,6 +63,8 @@ KIT_SATURATION_BOOST = 1.5
 # height on the pitch.
 SUPERSAMPLE = 4
 PLAYER_HEIGHT_M = 1.8
+# Drawn this much larger than life so the figures read on the pitch.
+ICON_SIZE_FACTOR = 1.15
 ICON_HEIGHT_UNITS = 22.5  # head top at -11, soles at +11.5
 ICON_TILE_HALF_UNITS = 15.0  # room for the arms and the blurred shadow
 # Where the soles are, in drawing units below the tile center (the socks
@@ -96,12 +106,12 @@ def pitch_to_image_coords(
     return px, py
 
 
-def _draw_rect(draw, to_px, x_a, x_b, y_a, y_b):
+def _draw_rect(draw, to_px, x_a, x_b, y_a, y_b, line_width_px=2):
     p1 = to_px((x_a, y_a))
     p2 = to_px((x_b, y_b))
     x1, x2 = sorted([p1[0], p2[0]])
     y1, y2 = sorted([p1[1], p2[1]])
-    draw.rectangle([x1, y1, x2, y2], outline=LINE_COLOR, width=2)
+    draw.rectangle([x1, y1, x2, y2], outline=LINE_COLOR, width=line_width_px)
 
 
 def _draw_spot(draw, center_px, radius_px=3):
@@ -109,33 +119,35 @@ def _draw_spot(draw, center_px, radius_px=3):
     draw.ellipse([x - radius_px, y - radius_px, x + radius_px, y + radius_px], fill=LINE_COLOR)
 
 
-def _draw_pitch_markings(draw, pitch_length, pitch_width, image_width_px, margin_px, scale):
+def _draw_pitch_markings(
+    draw, pitch_length, pitch_width, image_width_px, margin_px, scale, line_width_px=2, spot_radius_px=3
+):
     def to_px(point):
         return pitch_to_image_coords(point, pitch_length, pitch_width, image_width_px, margin_px)
 
-    _draw_rect(draw, to_px, -pitch_length / 2, pitch_length / 2, -pitch_width / 2, pitch_width / 2)
-    draw.line([to_px((0.0, -pitch_width / 2)), to_px((0.0, pitch_width / 2))], fill=LINE_COLOR, width=2)
+    _draw_rect(draw, to_px, -pitch_length / 2, pitch_length / 2, -pitch_width / 2, pitch_width / 2, line_width_px)
+    draw.line([to_px((0.0, -pitch_width / 2)), to_px((0.0, pitch_width / 2))], fill=LINE_COLOR, width=line_width_px)
 
     center = to_px((0.0, 0.0))
     circle_r_px = CENTER_CIRCLE_RADIUS * scale
     draw.ellipse(
         [center[0] - circle_r_px, center[1] - circle_r_px, center[0] + circle_r_px, center[1] + circle_r_px],
-        outline=LINE_COLOR, width=2,
+        outline=LINE_COLOR, width=line_width_px,
     )
-    _draw_spot(draw, center)
+    _draw_spot(draw, center, spot_radius_px)
 
     for side in (-1, 1):
         goal_line_x = side * pitch_length / 2
 
         pen_x = goal_line_x - side * PENALTY_AREA_DEPTH
-        _draw_rect(draw, to_px, goal_line_x, pen_x, -PENALTY_AREA_WIDTH / 2, PENALTY_AREA_WIDTH / 2)
+        _draw_rect(draw, to_px, goal_line_x, pen_x, -PENALTY_AREA_WIDTH / 2, PENALTY_AREA_WIDTH / 2, line_width_px)
 
         goal_area_x = goal_line_x - side * GOAL_AREA_DEPTH
-        _draw_rect(draw, to_px, goal_line_x, goal_area_x, -GOAL_AREA_WIDTH / 2, GOAL_AREA_WIDTH / 2)
+        _draw_rect(draw, to_px, goal_line_x, goal_area_x, -GOAL_AREA_WIDTH / 2, GOAL_AREA_WIDTH / 2, line_width_px)
 
         spot_x = goal_line_x - side * PENALTY_SPOT_DISTANCE
         spot_px = to_px((spot_x, 0.0))
-        _draw_spot(draw, spot_px)
+        _draw_spot(draw, spot_px, spot_radius_px)
 
         arc_r_px = CENTER_CIRCLE_RADIUS * scale
         if side == -1:
@@ -144,7 +156,7 @@ def _draw_pitch_markings(draw, pitch_length, pitch_width, image_width_px, margin
             start_angle, end_angle = 180 - PENALTY_ARC_HALF_ANGLE_DEG, 180 + PENALTY_ARC_HALF_ANGLE_DEG
         draw.arc(
             [spot_px[0] - arc_r_px, spot_px[1] - arc_r_px, spot_px[0] + arc_r_px, spot_px[1] + arc_r_px],
-            start=start_angle, end=end_angle, fill=LINE_COLOR, width=2,
+            start=start_angle, end=end_angle, fill=LINE_COLOR, width=line_width_px,
         )
 
         corner_r_px = CORNER_ARC_RADIUS * scale
@@ -161,7 +173,7 @@ def _draw_pitch_markings(draw, pitch_length, pitch_width, image_width_px, margin
             draw.arc(
                 [corner_px[0] - corner_r_px, corner_px[1] - corner_r_px,
                  corner_px[0] + corner_r_px, corner_px[1] + corner_r_px],
-                start=start, end=end, fill=LINE_COLOR, width=2,
+                start=start, end=end, fill=LINE_COLOR, width=line_width_px,
             )
 
 
@@ -232,14 +244,65 @@ def _grass(image_width_px, image_height_px, margin_px, scale):
     grass = np.broadcast_to(shade[None, :, :], (image_height_px, image_width_px, 3)).copy()
 
     rng = np.random.default_rng(GRASS_SEED)
-    grain = rng.normal(0.0, GRASS_GRAIN_SIGMA, (image_height_px, image_width_px))
-    coarse = rng.normal(128.0, 40.0, (image_height_px // GRASS_PATCH_CELL_PX + 2, image_width_px // GRASS_PATCH_CELL_PX + 2))
+    grain = rng.normal(0.0, GRASS_GRAIN_SIGMA, (image_height_px, image_width_px)).astype(np.float32)
+    cell_px = max(1, int(round(GRASS_PATCH_CELL_M * scale)))
+    coarse = rng.normal(128.0, 40.0, (image_height_px // cell_px + 2, image_width_px // cell_px + 2))
     patches = np.asarray(
         Image.fromarray(coarse.clip(0, 255).astype(np.uint8)).resize((image_width_px, image_height_px), Image.BICUBIC),
         dtype=np.float32,
     ) - 128.0
     grass += (grain + patches * GRASS_PATCH_STRENGTH)[..., None]
     return Image.fromarray(grass.clip(0, 255).astype(np.uint8))
+
+
+def _draw_smooth_markings(image, pitch_length, pitch_width, margin_px, scale):
+    """Paint the pitch markings onto image with anti-aliased edges: they are
+    drawn as a mask MARKINGS_SUPERSAMPLE times larger, then shrunk."""
+    factor = MARKINGS_SUPERSAMPLE
+    mask = Image.new("L", (image.width * factor, image.height * factor), 0)
+    draw = _MaskDraw(ImageDraw.Draw(mask))
+    _draw_pitch_markings(
+        draw, pitch_length, pitch_width, image.width * factor, margin_px * factor, scale * factor,
+        line_width_px=max(1, int(round(LINE_WIDTH_M * scale * factor))),
+        spot_radius_px=max(1, SPOT_RADIUS_M * scale * factor),
+    )
+    mask = mask.resize(image.size, Image.BOX)
+    image.paste(LINE_COLOR, (0, 0), mask)
+
+
+class _MaskDraw:
+    """Lets the marking code, which draws in LINE_COLOR, draw onto a
+    single-channel mask: any fill or outline becomes full coverage (255)."""
+
+    def __init__(self, draw):
+        self._draw = draw
+
+    def __getattr__(self, name):
+        method = getattr(self._draw, name)
+
+        def draw_opaque(*args, **kwargs):
+            for key in ("fill", "outline"):
+                if kwargs.get(key) is not None:
+                    kwargs[key] = 255
+            return method(*args, **kwargs)
+
+        return draw_opaque
+
+
+def _draw_ball(image, position_px, radius_px):
+    """The ball, anti-aliased the same way as the player icons."""
+    factor = SUPERSAMPLE
+    half = math.ceil(radius_px) + 2
+    tile = Image.new("RGBA", (half * 2 * factor, half * 2 * factor), (0, 0, 0, 0))
+    center = half * factor
+    big_radius = radius_px * factor
+    ImageDraw.Draw(tile).ellipse(
+        [center - big_radius, center - big_radius, center + big_radius, center + big_radius],
+        fill=BALL_FILL_COLOR, outline=BALL_OUTLINE_COLOR, width=max(1, int(round(big_radius * 0.18))),
+    )
+    small = tile.resize((half * 2, half * 2), Image.BOX)
+    px, py = position_px
+    image.paste(small, (int(round(px)) - half, int(round(py)) - half), small)
 
 
 def render_pitch(
@@ -251,7 +314,7 @@ def render_pitch(
     image_width_px: int = DEFAULT_IMAGE_WIDTH_PX,
     margin_px: int = DEFAULT_MARGIN_PX,
     player_height_m: float = PLAYER_HEIGHT_M,
-    ball_radius_px: int = 6,
+    ball_radius_m: float = BALL_RADIUS_M,
     kit_colors: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] | None = None,
 ) -> None:
     """kit_colors maps a category to its detected (shirt, shorts) colors;
@@ -261,11 +324,9 @@ def render_pitch(
     image_height_px = int(pitch_width * scale) + 2 * margin_px
 
     image = _grass(image_width_px, image_height_px, margin_px, scale)
-    draw = ImageDraw.Draw(image)
+    _draw_smooth_markings(image, pitch_length, pitch_width, margin_px, scale)
 
-    _draw_pitch_markings(draw, pitch_length, pitch_width, image_width_px, margin_px, scale)
-
-    icon_unit_px = player_height_m * scale / ICON_HEIGHT_UNITS
+    icon_unit_px = player_height_m * ICON_SIZE_FACTOR * scale / ICON_HEIGHT_UNITS
     for position, category in player_positions:
         px, py = pitch_to_image_coords(position, pitch_length, pitch_width, image_width_px, margin_px)
         if category in kit_colors:
@@ -276,11 +337,6 @@ def render_pitch(
 
     if ball_position is not None:
         px, py = pitch_to_image_coords(ball_position, pitch_length, pitch_width, image_width_px, margin_px)
-        draw.ellipse(
-            [px - ball_radius_px, py - ball_radius_px, px + ball_radius_px, py + ball_radius_px],
-            fill=BALL_FILL_COLOR,
-            outline=BALL_OUTLINE_COLOR,
-            width=2,
-        )
+        _draw_ball(image, (px, py), ball_radius_m * scale)
 
     image.save(output_path)

@@ -75,12 +75,28 @@ def test_render_pitch_with_no_players_still_creates_pitch(tmp_path):
 
 def test_render_pitch_draws_ball_at_expected_pixel(tmp_path):
     output_path = tmp_path / "mockup.png"
-    render_pitch([], str(output_path), ball_position=(0.0, 0.0), image_width_px=1050, margin_px=40, ball_radius_px=6)
+    render_pitch([], str(output_path), ball_position=(0.0, 0.0))
 
-    image = Image.open(output_path)
-    center_px, center_py = pitch_to_image_coords((0.0, 0.0), image_width_px=1050, margin_px=40)
+    image = Image.open(output_path).convert("RGB")
+    center_px, center_py = pitch_to_image_coords((0.0, 0.0))
     pixel = image.getpixel((int(center_px), int(center_py)))
     assert pixel == (255, 255, 255)
+
+
+def test_render_pitch_sizes_the_ball_in_meters(tmp_path):
+    """The ball keeps the same size relative to the pitch at any width
+    (radius ~0.33 m, larger than life so it stays visible)."""
+    for image_width_px, margin_px in ((2100, 80), (4200, 160)):
+        output_path = tmp_path / f"ball_{image_width_px}.png"
+        render_pitch([], str(output_path), ball_position=(0.0, 20.0), image_width_px=image_width_px, margin_px=margin_px)
+        image = Image.open(output_path).convert("RGB")
+        px, py = pitch_to_image_coords((0.0, 20.0), image_width_px=image_width_px, margin_px=margin_px)
+        pixels_per_meter = (image_width_px - 2 * margin_px) / 105.0
+        white_run = sum(
+            1 for dx in range(-40, 41)
+            if image.getpixel((int(px) + dx, int(py))) == (255, 255, 255)
+        )
+        assert 0.4 <= white_run / pixels_per_meter <= 0.7, (image_width_px, white_run)
 
 
 def test_render_pitch_with_no_ball_position_omits_ball(tmp_path):
@@ -91,45 +107,45 @@ def test_render_pitch_with_no_ball_position_omits_ball(tmp_path):
 
 def test_render_pitch_draws_center_spot(tmp_path):
     output_path = tmp_path / "mockup.png"
-    render_pitch([], str(output_path), image_width_px=1050, margin_px=40)
+    render_pitch([], str(output_path))
 
     image = Image.open(output_path)
-    assert _pixel(image, (0.0, 0.0), image_width_px=1050, margin_px=40) == LINE_COLOR
+    assert _pixel(image, (0.0, 0.0)) == LINE_COLOR
 
 
 def test_render_pitch_draws_center_circle_outline(tmp_path):
     output_path = tmp_path / "mockup.png"
-    render_pitch([], str(output_path), image_width_px=1050, margin_px=40)
+    render_pitch([], str(output_path))
 
     image = Image.open(output_path)
     # A point directly to the right of center, at the circle's radius, should
     # land on the outline.
     assert _any_pixel_near(
-        image, (CENTER_CIRCLE_RADIUS, 0.0), LINE_COLOR, radius=2, image_width_px=1050, margin_px=40
+        image, (CENTER_CIRCLE_RADIUS, 0.0), LINE_COLOR, radius=2
     )
 
 
 def test_render_pitch_draws_penalty_spots_on_both_ends(tmp_path):
     output_path = tmp_path / "mockup.png"
-    render_pitch([], str(output_path), image_width_px=1050, margin_px=40)
+    render_pitch([], str(output_path))
 
     image = Image.open(output_path)
-    assert _pixel(image, (-52.5 + 11.0, 0.0), image_width_px=1050, margin_px=40) == LINE_COLOR
-    assert _pixel(image, (52.5 - 11.0, 0.0), image_width_px=1050, margin_px=40) == LINE_COLOR
+    assert _pixel(image, (-52.5 + 11.0, 0.0)) == LINE_COLOR
+    assert _pixel(image, (52.5 - 11.0, 0.0)) == LINE_COLOR
 
 
 def test_render_pitch_draws_penalty_box_edges_on_both_ends(tmp_path):
     output_path = tmp_path / "mockup.png"
-    render_pitch([], str(output_path), image_width_px=1050, margin_px=40)
+    render_pitch([], str(output_path))
 
     image = Image.open(output_path)
     # Front edge (inner edge, 16.5m from each goal line) of each penalty box,
     # at pitch-width center (y=0), should fall on the box outline.
     assert _any_pixel_near(
-        image, (-52.5 + 16.5, 0.0), LINE_COLOR, radius=2, image_width_px=1050, margin_px=40
+        image, (-52.5 + 16.5, 0.0), LINE_COLOR, radius=2
     )
     assert _any_pixel_near(
-        image, (52.5 - 16.5, 0.0), LINE_COLOR, radius=2, image_width_px=1050, margin_px=40
+        image, (52.5 - 16.5, 0.0), LINE_COLOR, radius=2
     )
 
 
@@ -189,21 +205,24 @@ def _figure_height_px(tmp_path, image_width_px, margin_px):
     return bottom - top
 
 
-def test_render_pitch_draws_players_at_real_life_size(tmp_path):
-    """A figure is as tall as a real player (~1.8 m) relative to the pitch,
-    whatever the image width -- at 4.3 m they looked oversized. The measured
-    height includes the soft shadow below the feet, hence the allowance."""
-    for image_width_px, margin_px in ((1050, 40), (2100, 80)):
+def test_render_pitch_draws_players_a_little_larger_than_life(tmp_path):
+    """A figure is sized relative to the pitch, whatever the image width: a
+    real player's 1.8 m, drawn 15% larger so it reads (~2.07 m) -- at 4.3 m
+    the first icons looked oversized. The measured height includes the soft
+    shadow below the feet, hence the allowance above 2.07 m."""
+    for image_width_px, margin_px in ((2100, 80), (4200, 160)):
         pixels_per_meter = (image_width_px - 2 * margin_px) / 105.0
         height_m = _figure_height_px(tmp_path, image_width_px, margin_px) / pixels_per_meter
-        assert 1.6 <= height_m <= 2.4, (image_width_px, height_m)
+        assert 2.35 <= height_m <= 2.9, (image_width_px, height_m)
 
 
-def test_render_pitch_defaults_to_a_width_where_real_size_players_stay_readable(tmp_path):
+def test_render_pitch_defaults_to_a_high_definition_width(tmp_path):
+    """4200 px (~37 px per meter): at 2100 px the figures were too small to
+    show much detail."""
     output_path = tmp_path / "mockup.png"
     render_pitch([], str(output_path))
 
-    assert Image.open(output_path).width == 2100
+    assert Image.open(output_path).width == 4200
 
 
 def test_render_pitch_draws_detected_kits_more_vivid_than_the_dull_broadcast_color(tmp_path):
@@ -276,13 +295,29 @@ def test_render_pitch_mows_the_grass_in_alternating_light_and_dark_bands(tmp_pat
     assert min(shades[0], shades[2]) > max(shades[1], shades[3]), shades
 
 
-def test_render_pitch_gives_the_grass_a_visible_texture(tmp_path):
+def test_render_pitch_gives_the_grass_a_subtle_texture(tmp_path):
+    """Some grain so it doesn't read as flat paint, but faint -- the first,
+    stronger texture was too busy."""
     output_path = tmp_path / "mockup.png"
     render_pitch([], str(output_path), image_width_px=2100, margin_px=80)
     image = Image.open(output_path).convert("RGB")
 
     _, spread = _band_mean(image, -30.0, image_width_px=2100, margin_px=80)
-    assert spread.max() > 4, spread
+    assert 0.5 < spread.max() < 2.5, spread
+
+
+def test_render_pitch_grass_is_a_deep_green(tmp_path):
+    """Even the light bands are a deep green: the first two pitch colors
+    read too bright."""
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path), image_width_px=2100, margin_px=80)
+    image = Image.open(output_path).convert("RGB")
+
+    band_width_m = 105.0 / 20
+    light_band_center = -52.5 + band_width_m / 2
+    shade, _ = _band_mean(image, light_band_center, image_width_px=2100, margin_px=80)
+    assert shade.sum() < 200, shade
+    assert shade[1] > shade[0] and shade[1] > shade[2], shade  # still green
 
 
 def test_render_pitch_grass_is_the_same_on_every_render(tmp_path):
@@ -292,3 +327,37 @@ def test_render_pitch_grass_is_the_same_on_every_render(tmp_path):
     render_pitch([], str(tmp_path / "b.png"), image_width_px=1050, margin_px=40)
 
     assert Image.open(tmp_path / "a.png").tobytes() == Image.open(tmp_path / "b.png").tobytes()
+
+
+
+def test_render_pitch_draws_lines_at_real_width(tmp_path):
+    """Pitch lines are 12 cm wide, so they thicken with the image instead of
+    staying a fixed 2 px that looks spidery at high definition."""
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path))
+    image = Image.open(output_path).convert("RGB")
+
+    px, py = (int(round(v)) for v in pitch_to_image_coords((0.0, 25.0)))
+    bright = [dx for dx in range(-15, 16) if sum(image.getpixel((px + dx, py))) > 600]
+    assert 3 <= len(bright) <= 6, bright
+
+
+def test_render_pitch_draws_smooth_line_edges(tmp_path):
+    """Lines and circles are anti-aliased: along the center circle there are
+    in-between shades blending white into the grass, not a hard stair-step."""
+    output_path = tmp_path / "mockup.png"
+    render_pitch([], str(output_path))
+    image = Image.open(output_path).convert("RGB")
+
+    center_x, center_y = pitch_to_image_coords((0.0, 0.0))
+    radius_px = CENTER_CIRCLE_RADIUS * (4200 - 2 * 160) / 105.0
+    import math
+    blended = 0
+    for degrees in range(20, 70, 2):
+        angle = math.radians(degrees)
+        for offset in range(-6, 7):
+            x = int(round(center_x + (radius_px + offset) * math.cos(angle)))
+            y = int(round(center_y + (radius_px + offset) * math.sin(angle)))
+            if 350 < sum(image.getpixel((x, y))) < 650:
+                blended += 1
+    assert blended >= 20, blended
