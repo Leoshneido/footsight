@@ -189,7 +189,7 @@ Decision log for footsight. Read at the start of every session before doing anyt
 - A sliver of stand can show in a near-side corner past the apron.
 - The crowd palette isn't team-tinted.
 - Tangled players fall back to standing figures.
-- Detection review and ball review are still hand-checked only.
+- Detection review and ball review are still hand-checked only; the user re-ran both on 12.00.14 after the build and confirmed both images look right.
 
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
