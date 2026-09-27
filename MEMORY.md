@@ -151,3 +151,36 @@ Decision log for footsight. Read at the start of every session before doing anyt
 **In progress:** The trim over-fires on the 12.00.14 still (2 real players trimmed because their torso sample caught grass; 1 watermark detected at 0.72). Two fixes are measured and written up in the entry above but not implemented -- that is the first thing to pick up.
 **Decisions made:** See the two 2026-09-26 and 2026-09-22 entries above.
 **Next session:** (1) Implement the grass-pixel mask and the 0.75 confidence threshold, then re-verify all 4 stills. (2) Everything from this session is still uncommitted -- a 3-commit plan was drafted at session end but not run. (3) Still no SKILL.md in this project, which the project instructions call for.
+
+## Session Summary, 2026-09-26 to 2026-09-27
+**Worked on:** Finishing team classification on real stills, then manual overrides, then a full visual overhaul of the mockup.
+**Completed:**
+- *Classification:* a grass mask on jersey samples; the team split moved onto the hue circle (fixes Barça's striped kit), with the outlier trim kept on the straight line; off-pitch detections (a ball boy behind the touchline) now dropped before the team split.
+- *Manual overrides:* `--remove-detections` (click false boxes away, e.g. the Paramount+ watermark) and `--pick-ball` as a review window (move/add/remove the ball). Both checked by hand by the user on 12.00.14.
+- *Mockup look:*
+  - broadcast-style player figures that stand on their ground point, in kit colors read off the still with a saturation boost;
+  - figures 15% above life size;
+  - mown pitch with 20 stripes, darkened twice, with a faint seeded texture;
+  - 4200 px output with anti-aliased markings, line width, spots and ball sized in meters;
+  - the ball placed by its bottom edge.
+- *Docs:* README updated (setup, options, scope); `ultralytics` added to requirements.txt; SKILL.md created; Roboflow weights verified byte-identical to the official download.
+- *Commits:* 12 on `main` (cfc13eb to 387f5b0), none pushed. 86 tests pass.
+**In progress:** Nothing half-built. Everything is committed.
+**Decisions made:** See the 2026-09-26 and 2026-09-27 entries above. Key ones:
+- confidence stays 0.70, and watermarks are removed by hand;
+- hybrid linear/circular hue;
+- kit color accuracy isn't a goal, just players that look right;
+- figures sized in meters (1.8 m x 1.15);
+- 4200 px default.
+**Corrections made this session:**
+- "real players always score 0.80+" was wrong (a partly hidden player scored 0.72);
+- the "ad board players" were one ball boy;
+- the ball sits at shin height because it really is ahead of the player's feet, not because it was projected from its center.
+**Next session:**
+- The user wants to move to a new idea; start there.
+- Known open items:
+  - the angled/perspective mockup camera (captured 2026-09-10, needs its own design pass);
+  - the ball is drawn larger than life on purpose;
+  - the Bayern still's ball reads at shin height (parked by the user);
+  - the test suite now takes about 27 s because of 4200 px renders.
+- `vendor/PnLCalib` shows untracked files inside the submodule; they have been left out of every commit.
