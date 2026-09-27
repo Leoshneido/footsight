@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 from footsight import camera_view
-from footsight.camera_view import far_board_segments, render_camera_view, scaled_homography, vertical_scale
+from footsight.camera_view import far_board_segments, goal_frames, render_camera_view, scaled_homography, vertical_scale
 
 STILL_W, STILL_H = 600, 400
 # A broadcast-like camera: far touchline across the top, near touchline
@@ -97,9 +97,13 @@ def test_camera_view_draws_players_after_the_boards(still, tmp_path, monkeypatch
     monkeypatch.setattr(camera_view, "_draw_boards", lambda *a, **k: (calls.append("boards"), real_boards(*a, **k)))
     monkeypatch.setattr(camera_view, "draw_player_icon", lambda *a, **k: (calls.append("player"), real_icon(*a, **k)))
 
+    real_goals = camera_view._draw_goals
+    monkeypatch.setattr(camera_view, "_draw_goals", lambda *a, **k: (calls.append("goals"), real_goals(*a, **k)))
+
     render_camera_view(still, H, [_person((290, 60, 310, 100))], None, str(tmp_path / "c.png"))
 
-    assert calls == ["boards", "player"]
+    # a goalkeeper on his line stands in front of the posts and the net
+    assert calls == ["boards", "goals", "player"]
 
 
 def test_camera_view_draws_the_standing_figure_when_there_is_no_pose(still, tmp_path, monkeypatch):
@@ -170,3 +174,24 @@ def test_camera_view_ball_is_in_proportion_to_the_players(still, tmp_path, monke
 
     player_height_at_ball = 90 * 1.5
     assert 2 * balls[0] <= player_height_at_ball / 5
+
+
+
+def test_goal_frames_put_the_posts_on_each_goal_line_7_32_m_apart():
+    goals = goal_frames(H, STILL_W, STILL_H)
+
+    assert len(goals) == 2
+    for goal in goals:
+        left, right = (_to_pitch(H, post) for post in (goal["front_left"], goal["front_right"]))
+        assert abs(left[0]) == pytest.approx(52.5) and right[0] == pytest.approx(left[0])
+        assert sorted((left[1], right[1])) == pytest.approx([-3.66, 3.66])
+        back = _to_pitch(H, goal["back_left"])
+        assert abs(back[0]) == pytest.approx(54.5)  # net 2 m behind the goal line
+
+
+def test_goal_frames_skip_goals_that_are_out_of_frame():
+    """A camera zoomed in on midfield has no goal to draw."""
+    zoomed = np.float32([(-900, 100), (1500, 100), (2500, 520), (-1900, 520)])
+    Hz = np.linalg.inv(cv2.getPerspectiveTransform(PITCH_CORNERS, zoomed).astype(float))
+
+    assert goal_frames(Hz, STILL_W, STILL_H) == []

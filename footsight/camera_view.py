@@ -6,8 +6,8 @@ from the top-down renderer's grass and markings, warped into the camera's
 perspective with the still's homography; players stand where they were
 detected, posed like the real ones when their pose can be trusted.
 
-Layers, back to front: crowd, ground, far-side ad boards, then shadows,
-players and ball sorted far to near.
+Layers, back to front: crowd, ground, far-side ad boards, goals, then
+shadows, players and ball sorted far to near.
 """
 from pathlib import Path
 
@@ -40,6 +40,18 @@ BOARD_SEGMENT_M = 10.0
 BOARD_COLOR = (18, 28, 48)
 BOARD_TILE_W = 2220
 LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "logo" / "footsight_logo_board.png"
+
+# Goals: real dimensions; the net runs GOAL_DEPTH_M back, sloping down to
+# GOAL_BACK_HEIGHT_FRACTION of the crossbar height, with a GOAL_ROOF_DEPTH_M roof.
+GOAL_WIDTH_M = 7.32
+GOAL_HEIGHT_M = 2.44
+GOAL_DEPTH_M = 2.0
+GOAL_ROOF_DEPTH_M = 1.0
+GOAL_BACK_HEIGHT_FRACTION = 0.45
+POST_THICKNESS_M = 0.12
+POST_COLOR = (250, 250, 250)
+POST_OUTLINE_COLOR = (40, 40, 40)
+NET_COLOR = (235, 235, 235, 150)
 
 # A vertical meter on screen, when too few players are detected to measure
 # it: this many times the ground scale along the touchline at that row.
@@ -134,6 +146,72 @@ def far_board_segments(homography: np.ndarray, image_w: int, image_h: int):
                 continue
             segments.append((left, right))
     return segments
+
+
+def goal_frames(homography: np.ndarray, image_w: int, image_h: int) -> list[dict]:
+    """Ground points (image pixels) of each goal in view: front posts on the
+    goal line, the back of the net GOAL_DEPTH_M behind it and the edge of
+    the roof. Goals out of frame or beyond the horizon are left out."""
+    to_image = np.linalg.inv(homography)
+    reference = np.sign((to_image @ np.array([0.0, 0.0, 1.0]))[2])
+    half = GOAL_WIDTH_M / 2
+    goals = []
+    for side in (-1, 1):
+        line = side * PITCH_LENGTH_M / 2
+        corners = {
+            "front_left": (line, -half), "front_right": (line, half),
+            "back_left": (line + side * GOAL_DEPTH_M, -half), "back_right": (line + side * GOAL_DEPTH_M, half),
+            "roof_left": (line + side * GOAL_ROOF_DEPTH_M, -half), "roof_right": (line + side * GOAL_ROOF_DEPTH_M, half),
+        }
+        if not all(_in_front(to_image, point, reference) for point in corners.values()):
+            continue
+        goal = {name: _apply(to_image, point) for name, point in corners.items()}
+        xs = [p[0] for p in goal.values()]
+        ys = [p[1] for p in goal.values()]
+        if max(xs) < -0.1 * image_w or min(xs) > 1.1 * image_w or min(ys) > 2 * image_h or max(ys) < -image_h:
+            continue
+        goals.append(goal)
+    return goals
+
+
+def _draw_goals(image: Image.Image, goals, vertical) -> None:
+    """Net first (a see-through grid over back, sides and roof), then the
+    white frame on top. Drawn before the players, so a goalkeeper on his
+    line stands in front of it."""
+    from PIL import ImageDraw
+
+    def up(point, meters):
+        return point - np.array([0.0, meters * vertical(point[1])])
+
+    for goal in goals:
+        fl, fr = goal["front_left"], goal["front_right"]
+        bl, br = goal["back_left"], goal["back_right"]
+        flt, frt = up(fl, GOAL_HEIGHT_M), up(fr, GOAL_HEIGHT_M)
+        rlt, rrt = up(goal["roof_left"], GOAL_HEIGHT_M), up(goal["roof_right"], GOAL_HEIGHT_M)
+        back_height = GOAL_HEIGHT_M * GOAL_BACK_HEIGHT_FRACTION
+        blt, brt = up(bl, back_height), up(br, back_height)
+
+        net = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(net)
+        line = max(1, int(round(0.02 * vertical(fl[1]))))
+
+        def mesh(bottom_a, bottom_b, top_b, top_a, count):
+            for t in np.linspace(0, 1, count):
+                draw.line([tuple(bottom_a + (bottom_b - bottom_a) * t), tuple(top_a + (top_b - top_a) * t)], fill=NET_COLOR, width=line)
+                draw.line([tuple(bottom_a + (top_a - bottom_a) * t), tuple(bottom_b + (top_b - bottom_b) * t)], fill=NET_COLOR, width=line)
+
+        mesh(bl, br, brt, blt, 14)  # back
+        mesh(fl, bl, blt, flt, 8)  # sides
+        mesh(fr, br, brt, frt, 8)
+        mesh(flt, frt, rrt, rlt, 8)  # roof
+        image.paste(net, (0, 0), net)
+
+        frame = ImageDraw.Draw(image)
+        post = max(2, int(round(POST_THICKNESS_M * vertical(fl[1]) * 1.4)))
+        for a, b in ((fl, flt), (fr, frt), (flt, frt)):
+            frame.line([tuple(a), tuple(b)], fill=POST_OUTLINE_COLOR, width=post + 2)
+        for a, b in ((fl, flt), (fr, frt), (flt, frt)):
+            frame.line([tuple(a), tuple(b)], fill=POST_COLOR, width=post)
 
 
 def _ground(homography: np.ndarray, width: int, height: int) -> tuple[np.ndarray, np.ndarray]:
@@ -250,6 +328,7 @@ def render_camera_view(
     image = Image.fromarray(canvas.clip(0, 255).astype(np.uint8))
 
     _draw_boards(image, far_board_segments(H, width, height), vertical)
+    _draw_goals(image, goal_frames(H, width, height), vertical)
 
     drawables = [(box[3], "person", item) for item in scaled for box in [item[0]]]
     if ball_pixel is not None:

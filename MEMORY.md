@@ -185,11 +185,22 @@ Decision log for footsight. Read at the start of every session before doing anyt
   - 12.00.14: 19 of 22 posed.
 - Per run: poses about 1 s, camera render about 1.6 s, whole run about 15-16 s. Camera PNGs are 2.9-3.7 MB.
 **Open:**
-- No goal frames are drawn.
+- ~~No goal frames are drawn.~~ Done, see the next entry.
 - A sliver of stand can show in a near-side corner past the apron.
 - The crowd palette isn't team-tinted.
 - Tangled players fall back to standing figures.
 - Detection review and ball review are still hand-checked only; the user re-ran both on 12.00.14 after the build and confirmed both images look right.
+
+## 2026-09-27, Camera view: goal frames and nets, drawn behind the players
+**What was decided:** `camera_view.goal_frames` finds each goal in view and `_draw_goals` draws it.
+- Frame: posts 7.32 m apart on the goal line, crossbar 2.44 m high, 0.12 m thick, white with a dark outline.
+- Net: a see-through grid over the back (2 m behind the line, sloping down to 0.45 of the crossbar height), both sides and a 1 m roof.
+- Heights use the same player-based vertical scale as the boards.
+- Goals out of frame or beyond the horizon are skipped.
+- Draw order is now boards, goals, then players and ball.
+**Why:** The user asked for goal frames. In the throwaway sketch the net and post were drawn over the goalkeeper, because the sketch painted the goal on top of the finished image. The user flagged it, and the build fixes it by drawing goals before players; a test pins the order.
+**What was rejected:** Depth-sorting the goal among the players (a player standing inside the net is rare; drawing goals before everyone is simpler and right for keepers on their line).
+**Verification:** 118 tests pass, written test-first. My first out-of-frame test wrongly assumed the synthetic camera's left goal was outside a 100 px frame (it reached x = 8); it was replaced with a zoomed midfield camera. Real stills: the Bayern still shows 1 goal, with the keeper in front of post and net; the three Barça stills have no goal in view, so nothing changes there.
 
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
