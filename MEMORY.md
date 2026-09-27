@@ -202,6 +202,15 @@ Decision log for footsight. Read at the start of every session before doing anyt
 **What was rejected:** Depth-sorting the goal among the players (a player standing inside the net is rare; drawing goals before everyone is simpler and right for keepers on their line).
 **Verification:** 118 tests pass, written test-first. My first out-of-frame test wrongly assumed the synthetic camera's left goal was outside a 100 px frame (it reached x = 8); it was replaced with a zoomed midfield camera. Real stills: the Bayern still shows 1 goal, with the keeper in front of post and net; the three Barça stills have no goal in view, so nothing changes there.
 
+## 2026-09-27, Camera-view leftovers parked; next: analysis overlay tools
+**What was decided:** Three camera-view items are parked by the user, not bugs to chase:
+- the crowd keeps its current general palette (no team tint);
+- the near-side corner sliver of stand is acceptable for now;
+- tangled players stay as standing figures for now.
+The next feature is overlay tools for analyzing the stills.
+**Why:** The user's call. The camera view is good enough to move on to the analysis features, which are the point of the tool for content creators.
+**What was rejected:** N/A. These are deferrals, not alternatives.
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.
