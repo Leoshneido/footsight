@@ -1,0 +1,77 @@
+---
+name: footsight
+description: Working spec for footsight -- turns a football broadcast still into a 2D pitch mockup. Read before changing any footsight module: pipeline contract, module interfaces, hard-won lessons, and how to verify changes.
+---
+
+# footsight
+
+Broadcast still (main wide camera) -> 2D top-down pitch mockup with players
+colored by team, goalkeepers, referees and the ball. Personal-use v1, local
+open-source tools only, zero per-image cost. Decisions and their history live
+in `MEMORY.md`; failed approaches in `ERRORS.md`. This file is the distilled
+contract -- keep it in sync when either changes.
+
+## Pipeline (`footsight/pipeline.py::run`)
+
+```
+still.png
+  -> pitch_calibration.compute_homography   3x3 image->pitch homography (or None -> RuntimeError)
+  -> player_detection.detect_players        [(box, role)], role in player/goalkeeper/referee
+  -> review(image_path, detections)         optional: --remove-detections drops false boxes
+  -> team_classification.classify_players   only role=="player" boxes -> team_a/team_b/officials
+  -> projection (box bottom-center -> pitch meters), filter_to_pitch
+  -> ball: hand-placed pixel (--pick-ball) wins, else ball_detection.find_ball
+  -> render.render_pitch                    PNG
+```
+
+Category mapping: goalkeeper/referee render by detected role; a player the
+classifier labels `officials` renders as `referee`.
+
+## Module contracts
+
+| Module | Interface | Rules |
+|---|---|---|
+| `pitch_calibration` | `compute_homography(image_path, weights_kp, weights_line, device="cpu") -> ndarray \| None` | PnLCalib (vendored submodule) runs **only as a subprocess** via `scripts/pnlcalib_infer.py`; never import it. |
+| `player_detection` | `load_model(weights)`, `detect_players(image_path, model, confidence=0.7, image_size=1280) -> list[(box, role)]` | Ultralytics YOLO + Roboflow `football-player-detection-v9.pt`. Model's own `ball` class is dropped. |
+| `detection_picker` | `detection_at(point, detections)`, `drop_detections(detections, removed)`, `review_detections(image_path, detections)` | Smallest box wins on overlap. Window loop is untested (needs a display). |
+| `team_classification` | `classify_players(image_path, player_boxes) -> list[str]` | See "Team split" below. `<2` players -> all `team_a`. |
+| `ball_detection` | `find_ball(image_path, player_boxes) -> box \| None` | Classical HSV + 5x5 opening + circularity >= 0.65, searched near players. |
+| `ball_picker` | `display_scale`, `to_source_pixel`, `pick_ball_pixel(image_path)` | Clicks map back to full-resolution pixels (homography space). |
+| `projection` | `bbox_to_ground_point`, `project_points[_indexed]`, `filter_to_pitch` | Pitch coords in meters, **centered at origin**, 105 x 68, 5 m margin. |
+| `render` | `render_pitch(player_positions, output_path, ball_position=None, ...)` | `player_positions = [((x, y), category)]`; categories: team_a, team_b, goalkeeper, referee, assistant_referee. Procedural PIL drawing, no assets. |
+
+## Team split (the part most likely to break)
+
+1. Torso sample = middle third of box height x middle half of width.
+2. Drop grass pixels (OpenCV hue 40-60); keep all if nothing remains.
+3. Per player compute **two** hues:
+   - straight-line median -> Tukey fence (1.5 x IQR) trims odd colors as `officials` (a referee the detector called a player);
+   - circular median (cut at the widest empty hue gap) -> k-means k=2 on unit-circle points for the team split.
+4. Hue only. Saturation and value were tried and add noise (shadow, blur).
+
+Why two hues: striped kits straddling the red seam (claret 170-179 and 0-10)
+break a straight-line median; a circular trim lets the referee through because
+striped teams spread widely on the circle.
+
+## Lessons (don't relearn these)
+
+- **Verify on real stills, not just tests.** Synthetic flat-color rectangles can't reproduce photo noise. Crop every doubtful box and look at it before concluding.
+- **Watermarks** (Paramount+) score 0.65-0.73 as players -- overlapping real, partly hidden players (0.72). No confidence cutoff or box-shape filter separates them, and they project inside the pitch. Remove by hand.
+- **Hue in the 40-60 band** means grass in the crop, not a jersey.
+- **Stills in front of ad boards** pick up board color; the circular split currently handles the known cases.
+- Generic detectors (COCO) miss the ~12 px ball; a learned ball model flags spare balls by the touchline. Classical detection + manual fallback is the standing choice.
+- Before changing a jersey feature, inspect per-player hue histograms -- that is what exposed the 50/50 striped-kit split.
+
+## Working conventions
+
+- Use the project venv: `.venv/bin/python -m pytest -q`.
+- Test-first: write the failing test, watch it fail for the right reason, then implement. Tests mock stages in `test_pipeline.py`; real-image checks go in a scratch script, not the suite.
+- Sample stills are in `stills/`; macOS filenames contain a narrow no-break space before AM/PM -- use `glob`, not typed paths.
+- Real-still reference results (as of 2026-09-26): Bayern/Bodo 5/7 + goalkeeper; Barca/Feyenoord stills 10-11 per team + referee trimmed; watermark trimmed or removed.
+
+## Open items
+
+- A striped player whose straight-line median falls deep in a hue gap could still be trimmed as an official (not yet seen).
+- On 12.00.14 one classified player projects off-pitch and is dropped; not yet identified.
+- Future direction: angled/perspective mockup camera with flat icons (needs its own design pass).
+- Local `-v9` weights not confirmed identical to the Roboflow `setup.sh` download.

@@ -90,6 +90,11 @@ Decision log for footsight. Read at the start of every session before doing anyt
 **Verification:** 60 tests pass, including a new synthetic striped-kit test that failed before the change. Real-still results as above.
 **Open, not fixed:** The trim still uses the straight-line median, so a striped player whose median falls deep into the gap could be trimmed as an official. Not seen on any still yet.
 
+## 2026-09-26, SKILL.md added at the project root
+**What was decided:** A single `SKILL.md` at the repo root holds the distilled working spec: the pipeline contract, module interfaces, the team-split algorithm, lessons, conventions and open items. It is kept in sync with MEMORY.md and ERRORS.md, which stay the full history.
+**Why:** The project instructions call for a SKILL.md capturing what has been learned. A root file matches how the instructions refer to it and is readable by both people and Claude.
+**What was rejected:** One skill.md per module (the modules are small and tightly coupled through `pipeline.run`, so a single spec is easier to keep accurate). `.claude/skills/footsight/SKILL.md` (would auto-load as a Claude Code skill, but hides the file from anyone else reading the repo; can be revisited).
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.
