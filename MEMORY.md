@@ -121,6 +121,11 @@ Decision log for footsight. Read at the start of every session before doing anyt
 **Why:** The README pointed at that link but noted the local file was named `-v9` and hadn't been checked.
 **What was rejected:** Installing `gdown` just to verify; `curl` against `drive.usercontent.google.com` with `confirm=t` worked without adding a dependency.
 
+## 2026-09-26, Review windows verified by hand
+**What was decided:** `--remove-detections` and `--pick-ball` are confirmed working end to end. The user ran both on the 12.00.14 still: removed the Paramount+ watermark, placed the missed ball, and got a correct mockup.
+**Why:** Neither window loop can be unit-tested (they need a display and real clicks), so this manual run was the only check of the parts outside `detection_at`/`drop_detections` and `handle_key`.
+**What was rejected:** N/A. This records a verification, not a choice.
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.
