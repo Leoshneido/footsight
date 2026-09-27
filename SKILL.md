@@ -63,6 +63,11 @@ striped teams spread widely on the circle.
 - Generic detectors (COCO) miss the ~12 px ball; a learned ball model flags spare balls by the touchline. Classical detection + manual fallback is the standing choice.
 - Before changing a jersey feature, inspect per-player hue histograms -- that is what exposed the 50/50 striped-kit split.
 
+## Brand assets
+
+- Logo: `scripts/make_logo.py` -> `assets/logo/` (`footsight_logo.png` transparent, `footsight_logo_board.png` on navy, `footsight_ball.png`). "FOOTSiGHT", Kanit Black Italic (SIL OFL 1.1, read from `~/Library/Fonts`, not vendored), football at the font's own i-dot position, 1.875x the dot.
+- Mockups must not reuse broadcast pixels (copyright, see MEMORY.md 2026-09-27): anything outside the pitch is drawn, not filtered from the still.
+
 ## Working conventions
 
 - Use the project venv: `.venv/bin/python -m pytest -q`.

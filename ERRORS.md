@@ -48,3 +48,10 @@ Log of approaches that took more than 2 attempts to work. Checked before suggest
 **What worked:** A classical HSV threshold (low saturation, high brightness) in a padded window near each player's feet, then 5x5 morphological opening, then contour filter by size and circularity ≥0.65. Found the real ball, confirmed by visual crop.
 
 **Note for next time:** For small objects (ball-sized) in broadcast frames, skip general-purpose learned detectors and go straight to classical segmentation. 5x5 was the smallest opening kernel that separated the ball from a line; 3x3 was too weak.
+
+## Logo sketch: pitch icon as the dot of the "i" (2026-09-27)
+**What didn't work:**
+- Placing text with PIL's default top-left anchor and a hand-computed baseline from `getmetrics()`: the word ran off the bottom of the board.
+- A shorter "i" inside an uppercase word: first the icon was sized from the letter's width, so it overlapped the S and G. Then it was sized to fit between the top of the "ı" and the cap height, but it came out tiny, because Kanit Black's lowercase "ı" is almost as tall as its capitals.
+**What worked:** Drawing each piece with `anchor="ls"` (left, baseline) on an oversized transparent layer, putting the icon relative to the letter's real bounding box, then cropping the whole group with `getbbox()` and centering it on the board.
+**Note for next time:** For logo and text layout in PIL, always use baseline anchors and center the final cropped group. Don't try to predict positions from font metrics. Check the x-height against the cap height before designing anything that sits "above a lowercase letter inside capitals".
