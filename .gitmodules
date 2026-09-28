@@ -1,3 +1,4 @@
 [submodule "vendor/PnLCalib"]
 	path = vendor/PnLCalib
 	url = https://github.com/mguti97/PnLCalib.git
+	ignore = untracked
