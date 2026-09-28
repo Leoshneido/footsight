@@ -7,8 +7,12 @@
   <link rel="stylesheet" href="/editor/editor.css">
 </head>
 <body>
-  <header id="toolbar" aria-label="Tools">
-    <span class="brand">FOOTS<span class="i">i</span>GHT</span>
+  <aside id="toolbar" aria-label="Tools">
+    <div class="bar-head">
+      <span class="brand">FOOTS<span class="i">i</span>GHT</span>
+      <label class="hide-toggle"><input id="hide-toolbar" type="checkbox"> Hide toolbar <kbd>B</kbd></label>
+    </div>
+    <h3>Tools</h3>
     <nav id="tools">
       <button data-tool="highlight" title="Highlight (H)">Highlight <kbd>H</kbd></button>
       <button data-tool="tag" title="Tag (T)">Tag <kbd>T</kbd></button>
@@ -16,27 +20,36 @@
       <button data-tool="pass" title="Pass arrow (P)">Pass <kbd>P</kbd></button>
       <button data-tool="link" title="Link players (K)">Link <kbd>K</kbd></button>
       <button data-tool="line" title="Line (L) — Shift: across the pitch, Alt: dashed">Line <kbd>L</kbd></button>
-      <button data-tool="zone" title="Zone (Z)">Zone <kbd>Z</kbd></button>
+      <button data-tool="zone" title="Zone (Z) — click the first point to close">Zone <kbd>Z</kbd></button>
       <button data-action="spotlight" title="Spotlight (S)">Spotlight <kbd>S</kbd></button>
     </nav>
+    <h3>Color</h3>
     <nav id="colors">
       <button data-color="yellow" title="Yellow (1)"></button>
       <button data-color="cyan" title="Cyan (2)"></button>
       <button data-color="white" title="White (3)"></button>
       <button data-color="red" title="Red (4)"></button>
     </nav>
-    <nav id="actions">
+    <h3>Edit</h3>
+    <nav class="row">
       <button data-action="undo" title="Undo (Cmd/Ctrl+Z)">Undo</button>
+      <button data-action="redo" title="Redo (Shift+Cmd/Ctrl+Z)">Redo</button>
       <button data-action="clear" title="Clear (C)">Clear <kbd>C</kbd></button>
+    </nav>
+    <h3>Still</h3>
+    <nav class="row still">
       <button data-action="prev" title="Previous still (←)">←</button>
       <span id="still-name"></span>
       <button data-action="next" title="Next still (→)">→</button>
-      <button data-action="save" title="Save overlays (Cmd/Ctrl+S)">Save</button>
-      <button data-action="export" title="Export PNG (E)">Export <kbd>E</kbd></button>
-      <button data-action="fullscreen" title="Full screen (F)">Full screen <kbd>F</kbd></button>
-      <button data-action="help" title="Keys (?)">?</button>
     </nav>
-  </header>
+    <nav id="actions">
+      <button data-action="save" title="Save overlays (Cmd/Ctrl+S)">Save overlays <kbd>⌘S</kbd></button>
+      <button data-action="export" title="Export PNG (E)">Export PNG <kbd>E</kbd></button>
+      <button data-action="fullscreen" title="Full screen (F)">Full screen <kbd>F</kbd></button>
+      <button data-action="help" title="Keys (?)">Keys <kbd>?</kbd></button>
+    </nav>
+  </aside>
+  <button id="toolbar-tab" data-action="toggle-toolbar" title="Show toolbar (B)" aria-label="Show toolbar">☰</button>
 
   <main id="stage-wrap">
     <svg id="stage" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="Camera view">
@@ -70,10 +83,10 @@
     <dl>
       <dt>H</dt><dd>Highlight a player (click again to remove)</dd>
       <dt>T</dt><dd>Tag a player, type, Enter</dd>
-      <dt>A / P</dt><dd>Drag a run / pass arrow</dd>
+      <dt>A / P</dt><dd>Drag a curved run / straight dotted pass</dd>
       <dt>K</dt><dd>Click players to link, Enter to finish</dd>
       <dt>L</dt><dd>Drag a line — Shift: across the pitch, Alt: dashed</dd>
-      <dt>Z</dt><dd>Click points for a zone, Enter to close</dd>
+      <dt>Z</dt><dd>Click points for a zone; click the first point (or Enter) to close</dd>
       <dt>S</dt><dd>Spotlight the highlighted players</dd>
       <dt>1–4</dt><dd>Yellow, cyan, white, red</dd>
       <dt>⌘Z / ⇧⌘Z</dt><dd>Undo / redo</dd>
@@ -81,6 +94,7 @@
       <dt>Esc</dt><dd>Cancel the shape in progress</dd>
       <dt>← / →</dt><dd>Previous / next still</dd>
       <dt>F</dt><dd>Full screen</dd>
+      <dt>B</dt><dd>Hide / show the toolbar</dd>
       <dt>E / ⌘S</dt><dd>Export PNG / save overlays</dd>
     </dl>
   </aside>

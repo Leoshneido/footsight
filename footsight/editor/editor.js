@@ -6,7 +6,9 @@ import {
   acrossPitchLine,
   arrowHead,
   densify,
+  dotsAlong,
   makeProjector,
+  nearFirstPoint,
   parseOverlays,
   projectPolygon,
   ribbonPolygon,
@@ -28,7 +30,8 @@ const TAG_FILL = "#0F1423";
 const RING_RADIUS = 1.3;
 const RING_THICKNESS = 0.22;
 const RUN_WIDTH = 0.55;
-const PASS_WIDTH = 0.4;
+const PASS_DOT = 0.2; // radius of each dot in a pass
+const PASS_SPACING = 0.9;
 const HEAD_SIZE = 2.0;
 const LINK_WIDTH = 0.3;
 const LINK_DOT = 0.45;
@@ -37,6 +40,7 @@ const ZONE_BORDER = 0.25;
 const DASH = 1.2;
 const GAP = 0.8;
 const MIN_ARROW = 1.0;
+const CLOSE_ZONE_PX = 20; // on screen: how near the first corner a click closes a zone
 const DRAG_SAMPLE = 0.2;
 
 const $ = (id) => document.getElementById(id);
@@ -155,9 +159,14 @@ function groundShapes(overlay, scene, P) {
       const path = overlay.points_m;
       if (pathLength(path) < 0.5) break;
       const body = trimEnd(path, HEAD_SIZE * 0.8);
-      const width = overlay.style === "pass" ? PASS_WIDTH : RUN_WIDTH;
-      if (overlay.style === "pass") dashes(body).forEach((piece) => shapes.push(ribbonShape(P, piece, width, color)));
-      else shapes.push(ribbonShape(P, body, width, color));
+      if (overlay.style === "pass") {
+        for (const c of dotsAlong(body, PASS_SPACING)) {
+          const dot = projectPolygon(P, ringPolygon(c, PASS_DOT, 20));
+          if (dot.length > 2) shapes.push({ tag: "polygon", attrs: { points: pointsAttr(dot), fill: color } });
+        }
+      } else {
+        shapes.push(ribbonShape(P, body, RUN_WIDTH, color));
+      }
       const tip = path.at(-1);
       const back = trimEnd(path, 1.0).at(-1);
       const head = projectPolygon(P, arrowHead(tip, [tip[0] - back[0], tip[1] - back[1]], HEAD_SIZE));
@@ -262,13 +271,31 @@ function renderPreview() {
   if (!s || !d) return;
   const overlay = previewOverlay(d);
   if (overlay) drawShapes(layers.preview, groundShapes(overlay, s.scene, s.projector));
+  if (d.type === "zone" && d.points.length) drawCloseHandle(s, d);
+}
+
+// Image pixels per screen pixel: keeps handles and click tolerances the same
+// size on screen whatever the window size.
+const screenScale = () => 1 / svg.getScreenCTM().a;
+
+// The zone's first corner, drawn as a handle: clicking it closes the zone.
+function drawCloseHandle(s, d) {
+  const first = s.projector.toImage(d.points[0]);
+  if (!first) return;
+  const scale = screenScale();
+  const ready = d.cursorPx && nearFirstPoint(s.projector, d.points, d.cursorPx, CLOSE_ZONE_PX * scale);
+  el("circle", {
+    cx: first[0], cy: first[1], r: (ready ? 12 : 8) * scale,
+    fill: ready ? COLORS[d.color] : TAG_FILL, stroke: COLORS[d.color], "stroke-width": 3 * scale,
+  }, layers.preview);
 }
 
 function previewOverlay(d) {
   const color = d.color;
-  if ((d.type === "run" || d.type === "pass") && d.points.length > 1) {
-    return { type: "arrow", style: d.type, points_m: smoothPath(d.points), color };
+  if (d.type === "run" && d.points.length > 1) {
+    return { type: "arrow", style: "run", points_m: smoothPath(d.points), color };
   }
+  if (d.type === "pass" && d.end) return { type: "arrow", style: "pass", points_m: [d.start, d.end], color };
   if (d.type === "line" && d.end) return { type: "line", ...lineEnds(d), color };
   if (d.type === "link" && d.players.length) {
     const players = d.hover !== null && d.hover !== d.players.at(-1) ? [...d.players, d.hover] : d.players;
@@ -363,11 +390,17 @@ function onPointerDown(event) {
       if (player === null) return notice("Click a player to tag", 1400);
       return showTagInput(player, color);
     }
-    case "run":
+    case "run": {
+      if (!m) return;
+      const start = player !== null ? s.scene.players[player].feet_m : m;
+      app.drawing = { type: "run", points: [start], color };
+      svg.setPointerCapture(event.pointerId);
+      return;
+    }
     case "pass": {
       if (!m) return;
       const start = player !== null ? s.scene.players[player].feet_m : m;
-      app.drawing = { type: app.tool, points: [start], color };
+      app.drawing = { type: "pass", start, end: null, color };
       svg.setPointerCapture(event.pointerId);
       return;
     }
@@ -386,7 +419,8 @@ function onPointerDown(event) {
     }
     case "zone": {
       if (!m) return;
-      app.drawing ||= { type: "zone", points: [], cursor: null, color };
+      app.drawing ||= { type: "zone", points: [], cursor: null, cursorPx: null, color };
+      if (nearFirstPoint(s.projector, app.drawing.points, px, CLOSE_ZONE_PX * screenScale())) return finishShape();
       const last = app.drawing.points.at(-1);
       if (!last || Math.hypot(last[0] - m[0], last[1] - m[1]) > 0.3) app.drawing.points.push(m);
       renderPreview();
@@ -401,9 +435,11 @@ function onPointerMove(event) {
   if (!s || !d) return;
   const px = toImagePoint(event);
   const m = s.projector.toPitch(px);
-  if ((d.type === "run" || d.type === "pass") && m) {
+  if (d.type === "run" && m) {
     const last = d.points.at(-1);
     if (Math.hypot(m[0] - last[0], m[1] - last[1]) >= DRAG_SAMPLE) d.points.push(m);
+  } else if (d.type === "pass" && m) {
+    d.end = m;
   } else if (d.type === "line" && m) {
     d.end = m;
     d.across = event.shiftKey;
@@ -412,6 +448,7 @@ function onPointerMove(event) {
     d.hover = snapPlayer(s.scene, s.projector, px);
   } else if (d.type === "zone") {
     d.cursor = m;
+    d.cursorPx = px;
   }
   renderPreview();
 }
@@ -419,9 +456,13 @@ function onPointerMove(event) {
 function onPointerUp(event) {
   const d = app.drawing;
   if (!d) return;
-  if (d.type === "run" || d.type === "pass") {
+  if (d.type === "run") {
     const points = smoothPath(d.points);
-    if (pathLength(points) >= MIN_ARROW) commit((s) => s.overlays.push({ type: "arrow", style: d.type, points_m: points, color: d.color }));
+    if (pathLength(points) >= MIN_ARROW) commit((s) => s.overlays.push({ type: "arrow", style: "run", points_m: points, color: d.color }));
+    app.drawing = null;
+  } else if (d.type === "pass") {
+    const points = d.end ? [d.start, d.end] : [];
+    if (points.length && pathLength(points) >= MIN_ARROW) commit((s) => s.overlays.push({ type: "arrow", style: "pass", points_m: points, color: d.color }));
     app.drawing = null;
   } else if (d.type === "line") {
     const long = d.end && (d.across || Math.hypot(d.end[0] - d.start[0], d.end[1] - d.start[1]) >= MIN_ARROW);
@@ -611,6 +652,7 @@ function toggleFullscreen() {
 const actions = {
   spotlight: toggleSpotlight,
   undo,
+  redo,
   clear: () => commit((s) => { s.overlays = []; s.spotlight = false; }),
   prev: () => loadStill(app.index - 1),
   next: () => loadStill(app.index + 1),
@@ -622,6 +664,11 @@ const actions = {
 
 document.addEventListener("keydown", (event) => {
   if (!$("tag-input").hidden) return;
+  const focused = document.activeElement;
+  if ((event.key === "Enter" || event.key === " ") && focused && focused !== document.body) {
+    event.preventDefault();
+    focused.blur();
+  }
   const key = event.key.toLowerCase();
   const mod = event.metaKey || event.ctrlKey;
   if (mod && key === "z") {
@@ -648,6 +695,7 @@ document.addEventListener("keydown", (event) => {
   if (key === "c") return actions.clear();
   if (key === "e") return exportPng();
   if (key === "f") return toggleFullscreen();
+  if (key === "b") return actions["toggle-toolbar"]();
   if (key === "?") return actions.help();
 });
 
@@ -665,22 +713,35 @@ svg.addEventListener("pointermove", onPointerMove);
 svg.addEventListener("pointerup", onPointerUp);
 svg.addEventListener("dblclick", finishShape);
 
-// The toolbar slides away so the still fills the recording; it comes back
-// when the mouse reaches the top edge.
-let hideTimer = null;
-function scheduleHide() {
-  clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => $("toolbar").classList.add("hidden"), 1800);
-}
-document.addEventListener("mousemove", (event) => {
-  const toolbar = $("toolbar");
-  if (event.clientY < 70 || toolbar.contains(event.target)) {
-    toolbar.classList.remove("hidden");
-    clearTimeout(hideTimer);
-  } else if (!toolbar.classList.contains("hidden")) {
-    scheduleHide();
+// The toolbar stays on unless the user ticks "Hide toolbar" (or presses B);
+// the choice is remembered in this browser.
+function setToolbarHidden(hidden) {
+  document.body.classList.toggle("toolbar-hidden", hidden);
+  $("hide-toolbar").checked = hidden;
+  try {
+    localStorage.setItem("footsight.toolbarHidden", hidden ? "1" : "0");
+  } catch {
+    // storage unavailable (private window): the choice just isn't remembered
   }
+}
+actions["toggle-toolbar"] = () => setToolbarHidden(!document.body.classList.contains("toolbar-hidden"));
+$("hide-toolbar").addEventListener("change", (event) => {
+  setToolbarHidden(event.target.checked);
+  event.target.blur();
 });
+try {
+  setToolbarHidden(localStorage.getItem("footsight.toolbarHidden") === "1");
+} catch {
+  setToolbarHidden(false);
+}
+
+// Clicking a toolbar control must not leave it focused: Enter or Space would
+// then re-trigger it (Enter re-selected the Zone tool and threw the zone
+// away) instead of finishing the shape being drawn.
+for (const control of document.querySelectorAll("#toolbar button, #toolbar input, #toolbar-tab")) {
+  control.addEventListener("mousedown", (event) => event.preventDefault());
+  control.addEventListener("click", () => control.blur());
+}
 
 // ---------- start ----------
 
@@ -692,7 +753,6 @@ async function start() {
     if (!app.stills.length) return notice("No editable stills — run the pipeline first", 60000);
     await loadStill(0);
     updateToolbar();
-    scheduleHide();
   } catch (error) {
     notice(`Couldn't start the editor: ${error.message}`, 60000);
   }

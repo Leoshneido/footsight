@@ -6,8 +6,10 @@ import {
   arrowHead,
   catmullRom,
   densify,
+  dotsAlong,
   invert3,
   makeProjector,
+  nearFirstPoint,
   parseOverlays,
   projectPolygon,
   ribbonPolygon,
@@ -141,4 +143,21 @@ test("parseOverlays rejects a file it doesn't understand", () => {
   assert.throws(() => parseOverlays(JSON.stringify({ version: 2, overlays: [] })));
   assert.throws(() => parseOverlays(JSON.stringify({ version: 1, overlays: [{ type: "laser" }] })));
   assert.throws(() => parseOverlays(JSON.stringify({ version: 1, overlays: [{ type: "ring" }] })));
+});
+
+test("a dotted pass puts evenly spaced dots along the line", () => {
+  const dots = dotsAlong([[0, 0], [10, 0]], 1.0);
+  assert.equal(dots.length, 10);
+  close(dots[0][0], 0.5);
+  for (let i = 1; i < dots.length; i++) close(dist(dots[i], dots[i - 1]), 1.0, 1e-9);
+  assert.ok(dots.every(([, y]) => y === 0));
+});
+
+test("clicking back on a zone's first point closes it", () => {
+  const points = [[0, 0], [10, 0], [10, 10]];
+  const first = P.toImage([0, 0]);
+  assert.equal(nearFirstPoint(P, points, [first[0] + 5, first[1] - 5], 20), true);
+  assert.equal(nearFirstPoint(P, points, [first[0] + 40, first[1]], 20), false);
+  // a zone needs three corners before it can close
+  assert.equal(nearFirstPoint(P, points.slice(0, 2), first, 20), false);
 });

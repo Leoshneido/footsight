@@ -228,6 +228,17 @@ The next feature is overlay tools for analyzing the stills.
 - Not yet checked: drawing with the mouse, the keys, and export. The user needs to run the checklist.
 **Notes:** `node --test` needs the test files named directly (a folder argument fails). A `package.json` with `"type": "module"` marks the editor folder as ES modules.
 
+## 2026-09-27, Editor feedback round 1: right-hand toolbar, closing zones, straight dotted passes
+**What was decided:** The user ran the full checklist, and everything worked. Three changes followed:
+- (1) The toolbar is a vertical panel on the right, always on unless "Hide toolbar" is ticked. B or the ☰ tab brings it back, and the choice is remembered per browser. The auto-hiding top bar was removed.
+- (2) A zone closes by clicking its first corner again (within 20 screen px). A handle marks that corner and fills in when the cursor is close enough.
+- (3) The pass is a straight arrow of round dots from where the drag starts to where it ends (dots of 0.2 m radius every 0.9 m). The run stays curved and solid.
+**Why:** The user's preferences after using the editor.
+- Root cause of "there's no way to close a zone": after a toolbar button was clicked it kept keyboard focus, so Enter re-clicked the Zone button, which cancelled the zone in progress.
+- Toolbar controls now never take focus, and Enter or Space on a focused control is redirected to the drawing.
+**What was rejected:** Dashes for the pass (the user chose dots). A hidden toolbar with no way back (hence B plus the ☰ tab).
+**Verification:** 137 pytest tests and 17 node tests pass; the new geometry helpers `dotsAlong` and `nearFirstPoint` were written test-first. A headless Chrome screenshot shows the right-hand panel and the dotted pass. The user then checked closing a zone by clicking, the B toggle, the hide box and the tab live: all work.
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.

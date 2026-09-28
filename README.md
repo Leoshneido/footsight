@@ -53,16 +53,17 @@ and screen-record. Graphics lie on the grass under the players.
 |---|---|
 | H | Highlight a player (click again to remove) |
 | T | Tag a player: type a name, Enter |
-| A / P | Drag a run / pass arrow |
+| A / P | Drag a curved run arrow / a straight dotted pass |
 | K | Click players to link them, Enter to finish |
 | L | Drag a line -- Shift: across the pitch, Alt: dashed |
-| Z | Click points for a zone, Enter to close |
+| Z | Click points for a zone; click the first point again (or Enter) to close |
 | S | Spotlight the highlighted players |
 | 1-4 | Yellow, cyan, white, red |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
 | C / Esc | Clear the still / cancel the shape in progress |
 | Left / Right | Previous / next still |
 | F | Full screen |
+| B | Hide / show the toolbar (also the "Hide toolbar" box; the ☰ tab brings it back) |
 | E / Cmd/Ctrl+S | Export `<still>_camera_edited.png` / save overlays to reopen later |
 
 Nothing is written unless you export or save. Stills made before the editor

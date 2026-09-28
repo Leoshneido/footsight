@@ -143,3 +143,12 @@ def test_the_editor_page_loads_the_editor_and_stacks_the_layers(server):
     assert '<script type="module" src="/editor/editor.js">' in page
     order = [page.index(f'id="{layer}"') for layer in ("background", "ground", "preview", "figures", "veil", "tags")]
     assert order == sorted(order)
+
+
+def test_the_toolbar_can_be_hidden_and_brought_back(server):
+    """The toolbar sits on the right and stays on unless the user ticks
+    "Hide toolbar"; a tab at the edge (or B) brings it back."""
+    page = _request(server, "GET", "/")[2].decode()
+
+    assert 'id="hide-toolbar" type="checkbox"' in page
+    assert 'id="toolbar-tab"' in page

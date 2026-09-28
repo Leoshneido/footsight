@@ -148,6 +148,32 @@ export function smoothPath(points, eps = 0.5) {
   return catmullRom(simplifyRDP(points, eps));
 }
 
+// Centres of evenly spaced dots along a path (a dotted pass), the first half
+// a spacing in from the start.
+export function dotsAlong(path, spacing = 0.9) {
+  const dots = [];
+  let next = spacing / 2, travelled = 0;
+  for (let i = 1; i < path.length; i++) {
+    const [a, b] = [path[i - 1], path[i]];
+    const length = dist(a, b);
+    while (next <= travelled + length + 1e-9) {
+      const t = (next - travelled) / length;
+      dots.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      next += spacing;
+    }
+    travelled += length;
+  }
+  return dots;
+}
+
+// Whether a click (image px) lands on a zone's first corner -- which closes
+// the zone -- once it has at least three corners.
+export function nearFirstPoint(projector, points, clickPx, thresholdPx) {
+  if (points.length < 3) return false;
+  const first = projector.toImage(points[0]);
+  return first !== null && dist(first, clickPx) <= thresholdPx;
+}
+
 export function acrossPitchLine(x, pitch) {
   return [[x, -pitch.width / 2], [x, pitch.width / 2]];
 }
