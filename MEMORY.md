@@ -285,3 +285,38 @@ The next feature is overlay tools for analyzing the stills.
   - the Bayern still's ball reads at shin height (parked by the user);
   - the test suite now takes about 27 s because of 4200 px renders.
 - `vendor/PnLCalib` shows untracked files inside the submodule; they have been left out of every commit.
+
+## Session Summary, 2026-09-27 (camera view, logo, overlay editor)
+**Worked on:** The camera-angle view (players redrawn from the still's own broadcast angle), the footsight logo, and a live overlay editor for narrating over stills.
+**Completed:**
+- *Camera view (spikes, spec, plan, build):*
+  - every run writes `<out>_camera.png` alongside the top-down mockup;
+  - drawn stadium (seeded crowd dots, footsight ad boards on the far sides incl. behind a goal, goal frames with nets);
+  - pitch warped into perspective;
+  - players posed from `yolo11m-pose` joints (standing figure as fallback);
+  - no broadcast pixels, for copyright reasons.
+- *Logo:* "FOOTSiGHT" in Kanit Black Italic with a football as the i-dot (`scripts/make_logo.py` -> `assets/logo/`); Kanit's SIL OFL license confirmed.
+- *Overlay editor (spec, plan, build, one feedback round):* `python -m footsight.edit <folder>`, a local telestrator in the browser.
+  - Tools: highlight, tag, run and pass arrows, link, line, zone, spotlight.
+  - Stepping through stills, undo, opt-in export and save.
+  - Right-hand toolbar that can be hidden.
+  - Graphics drawn in perspective under the players.
+- *Hand checks by the user:* the review windows (with the camera view) and every editor tool.
+- *Commits:* 8 on `main` (7b59cf3 to 127a9cb), none pushed. 137 pytest and 17 node tests pass.
+**In progress:** Nothing. Everything is committed.
+**Decisions made:** See the 2026-09-27 entries above. Key ones:
+- no broadcast pixels in any generated image;
+- the camera view is drawn, not filtered from the frame;
+- poses come from `yolo11m-pose`;
+- overlays are on the camera view only;
+- the editor is a local web app used live while recording, in broadcast style, with saving opt-in.
+**Parked by the user:**
+- crowd team colors;
+- the near-side corner sliver of stand;
+- tangled players drawn as standing figures;
+- measurements (offside line, distances) in the editor;
+- a select-and-move tool.
+**Next session:**
+- The user will pick the next idea.
+- Candidates already captured: measurements in the editor; the video-freeze UI (the original goal, grabbing stills from footage), which could build on the editor's local web app.
+- `out/match/` holds the 4 test stills with editor layers. It's git-ignored; regenerate with the pipeline if needed.
