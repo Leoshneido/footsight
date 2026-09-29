@@ -466,3 +466,23 @@ The next feature is overlay tools for analyzing the stills.
 **What was decided:** The toolbar icon is the logo's "i" with its football dot (drawn exactly as in the logo), white on a rounded navy tile (the board color). `scripts/make_logo.py` generates `extension/icons/icon{16,32,48,128}.png`.
 **Why:** The user picked the most on-brand of three sketches.
 **What was rejected:** The football alone (generic), the football on a navy tile (readable but less on-brand).
+
+## Session Summary, 2026-09-29 (end of session)
+**Worked on:** Starting footsight from the Chrome extension, then polish: switching projects and the toolbar icon.
+**Completed:**
+- *Extension project workflow:* see the earlier 2026-09-29 summary.
+- *Switch project* in the running popup (6b43063).
+- *Toolbar icon* from the logo's i and football dot (9b70d8a); the user saw it in Chrome.
+- *GitHub:* `main` had gone missing on GitHub; it was pushed again with the full history, and every commit since is pushed (latest 9b70d8a).
+- *Studio:* stopped; nothing is running.
+**In progress:** First real use by the user. Not yet exercised in their Chrome:
+- Choose location & start… (the Finder dialog);
+- ⌘⇧S auto-start with footsight off;
+- the no-project pending frame;
+- Switch project.
+**Decisions made:** Start projects from the extension via the native-messaging helper; choose folder and start in one step; Switch project (option 1); icon C. All logged above.
+**Next session:**
+1. Ask how the first real session went and fix anything it exposed. If footsight won't start, read `<project>/footsight.log`. If the popup shows the setup screen, check the extension id is `kpjoeofameimecgoapeepcgbacpbkfai`.
+2. Then the parked ideas: goalkeepers' real kit, crowd team colors, measurements in the editor, select-and-move.
+3. Later, if other creators want it: deployment (Chrome Web Store plus an installer for the Python side).
+**Note:** Claude Code's automatic safety check failed intermittently again (it blocked the stop command three times).
