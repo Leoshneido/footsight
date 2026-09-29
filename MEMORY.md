@@ -438,3 +438,26 @@ The next feature is overlay tools for analyzing the stills.
 **What was decided:** "Choose location & start…" is a single helper request run by `background.js`; the popup also offers "Start in <last location>".
 **Why:** Chrome closes the popup when the Finder dialog takes focus, so a choose-then-Start flow inside the popup can't finish.
 **What was rejected:** A separate `choose_folder` request followed by Start in the popup (the design in the spec before the build).
+
+## 2026-09-29, Switch project from the running popup
+**What was decided:** While footsight runs, the popup has "Switch project…", which opens the New project form and Recent list (the running project left out), with a Back button. Starting another project stops the current one.
+**Why:** The user expected to start a project while one was running; the running view only offered Open editor / Capture now / Stop.
+**What was rejected:** Always showing the form under the running controls (popup too long); keeping stop-first (extra step).
+
+## Session Summary, 2026-09-29
+**Worked on:** Starting footsight projects from the Chrome extension, no Terminal needed.
+**Completed:**
+- *Spec and plan:* `docs/superpowers/specs/2026-09-29-extension-projects-design.md` and `docs/superpowers/plans/2026-09-29-extension-projects.md`.
+- *Helper:* `footsight/host.py` is the native-messaging helper Chrome starts on demand (`com.footsight.host`). It handles status, new_project (with the Finder picker), open, recent and stop, and starts the studio detached with its log in `<project>/footsight.log`. `footsight/projects.py` keeps state in `~/.footsight`.
+- *Setup:* `python -m footsight.setup_chrome` registers the helper; it has been run on the user's Mac. The manifest `key` fixes the extension id at `kpjoeofameimecgoapeepcgbacpbkfai`.
+- *Studio:* stops itself after 2 idle hours, never while an editor is open, and shuts down cleanly on SIGTERM.
+- *Extension:*
+  - a popup with the states setup / off / starting / running, covering New project, Recent, Open editor, Capture now, Switch project and Stop;
+  - ⌘⇧S with footsight off starts the last project, keeps the frame for the popup if there's no project, and falls back to Downloads if there's no helper or the start takes over 60 s.
+- *Design change during the build:* choosing the folder and starting are one step, because Chrome closes the popup when the Finder dialog opens.
+- *Checks:* a helper smoke test end to end (start, capture processed, recent, stop) and headless renders of the popup. 199 pytest and 39 node tests pass.
+- *Commits:* 3d7ead7 and 6b43063. `main` was pushed to GitHub; the remote branch had gone missing, so the push recreated it with the full history.
+- *Studio:* currently running on `captures/2026-09-28 22-07 test` (started through the helper).
+**In progress:** The user's hand check in Chrome (reload the extension; Choose location & start; ⌘⇧S; Stop, then ⌘⇧S auto-start; Reopen; Switch project).
+**Decisions made:** See the three 2026-09-29 entries above.
+**Next session:** Hear back on the Chrome checklist and fix anything it exposes. If the popup shows the setup screen, check the extension id matches. If footsight won't start, read `footsight.log` in the project folder. After that, the parked ideas: goalkeepers' real kit, measurements, select-and-move.

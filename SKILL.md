@@ -89,6 +89,7 @@ striped teams spread widely on the circle.
 - `python -m footsight.setup_chrome` writes the launcher `~/.footsight/footsight-host` (exact venv python) and Chrome's `NativeMessagingHosts/com.footsight.host.json`. The manifest `key` fixes the extension id at `kpjoeofameimecgoapeepcgbacpbkfai`; the registration only trusts that id.
 - Chrome closes an extension popup when another app (the Finder dialog) takes focus: anything that must survive that runs in `background.js`. So folder choice + start is one helper request (`new_project` with `choose: true`) sent by the background, which then waits for the studio, opens/focuses the editor tab and delivers any pending frame.
 - ⌘⇧S goes through `capture-core.deliverCapture` (pure, node-tested with injected deps): send → else auto-start the last project → else keep the frame in `chrome.storage.session` and open the popup; no helper or > 60 s start → Downloads.
+- Popup running view has "Switch project…" (the off view's form + Recent minus the running project, with Back); the helper's `open`/`new_project` already stop any running studio first.
 - Studio idle stop (`--idle-minutes`, 0 = never) only when no editor is subscribed to events; SIGTERM shuts down cleanly.
 - Real run: 4 stills as extension captures processed in 68 s; remove/add fixes ~4 s each; reopen keeps ready stills without reprocessing.
 
