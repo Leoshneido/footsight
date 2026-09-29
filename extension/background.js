@@ -1,28 +1,122 @@
-// footsight capture extension: ⌘⇧S (or the toolbar button) grabs the
-// current video frame and sends it to footsight studio.
+// footsight extension: the toolbar popup starts and reopens projects;
+// ⌘⇧S grabs the current video frame and sends it to footsight studio,
+// starting footsight on the last project if it isn't running.
 //
 // 1. "video": draw the page's <video> frame to a canvas -- the full video
 //    resolution (the method the user's site allows; see MEMORY.md).
 // 2. "screenshot": if the video can't be read, capture the visible tab and
 //    crop it to the player.
 // Nothing here bypasses any protection: if both come out black, it says so.
-import { captureHeaders, describeResult, fallbackFilename, isMostlyBlack, STUDIO_URL } from "./capture-core.js";
+import { captureHeaders, deliverCapture, describeResult, fallbackFilename, isMostlyBlack, STUDIO_URL } from "./capture-core.js";
+
+const HOST = "com.footsight.host";
+const START_TIMEOUT_MS = 60_000;
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command === "capture") await capture(tab);
 });
-chrome.action.onClicked.addListener(capture);
+
+// Requests from the popup. Starting a project runs here, not in the popup:
+// the popup closes when the Finder folder dialog takes focus.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const jobs = {
+    "start-project": () => startProject({ cmd: "new_project", name: message.name, choose: message.choose, location: message.location }, sendResponse),
+    "open-project": () => startProject({ cmd: "open", path: message.path }, sendResponse),
+    "open-editor": async () => sendResponse(await openEditor()),
+    "capture-active": async () => {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      sendResponse({ ok: true });
+      if (tab) await capture(tab);
+    },
+  };
+  if (!jobs[message?.type]) return false;
+  jobs[message.type]().catch((error) => sendResponse({ ok: false, error: error.message }));
+  return true; // answering asynchronously
+});
 
 // If Chrome didn't give us ⌘⇧S (something else already uses it), say so on
-// the toolbar button; the button itself always captures.
+// the toolbar button; "Capture now" in the popup still works.
 chrome.runtime.onInstalled.addListener(async () => {
   const commands = await chrome.commands.getAll();
   const shortcut = commands.find((c) => c.name === "capture")?.shortcut;
   if (!shortcut) {
     await chrome.action.setBadgeText({ text: "!" });
-    await chrome.action.setTitle({ title: "footsight: no shortcut assigned — set one at chrome://extensions/shortcuts (clicking here still captures)" });
+    await chrome.action.setTitle({ title: "footsight: no shortcut assigned — set one at chrome://extensions/shortcuts (Capture now in the popup still works)" });
   }
 });
+
+async function host(message) {
+  return chrome.runtime.sendNativeMessage(HOST, message);
+}
+
+async function studioUp() {
+  try {
+    return (await fetch(`${STUDIO_URL}/api/stills`)).ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForStudio(timeoutMs = START_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await studioUp()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return false;
+}
+
+// Focus the editor tab if one is open (reloading it onto the current
+// project), otherwise open one.
+async function openEditor() {
+  const [existing] = await chrome.tabs.query({ url: `${STUDIO_URL}/*` });
+  if (existing) {
+    await chrome.tabs.update(existing.id, { active: true, url: `${STUDIO_URL}/` });
+    await chrome.windows.update(existing.windowId, { focused: true });
+  } else {
+    await chrome.tabs.create({ url: `${STUDIO_URL}/` });
+  }
+  return { ok: true };
+}
+
+// new_project / open through the helper; answer the popup straight away,
+// then wait for footsight, open the editor and hand over any waiting frame.
+async function startProject(request, sendResponse) {
+  let reply;
+  try {
+    reply = await host(request);
+  } catch (error) {
+    reply = { ok: false, error: `The footsight helper isn't set up: ${error.message}` };
+  }
+  sendResponse(reply);
+  if (!reply.ok) {
+    if (!reply.cancelled) await chrome.storage.session.set({ lastError: reply.error });
+    return;
+  }
+  if (!(await waitForStudio(2 * START_TIMEOUT_MS))) {
+    const status = await host({ cmd: "status" }).catch(() => ({}));
+    await chrome.storage.session.set({ lastError: status.error || "footsight took too long to start. Check footsight.log in the project folder." });
+    return;
+  }
+  await openEditor();
+  await deliverPending();
+}
+
+async function deliverPending() {
+  const { pendingFrame } = await chrome.storage.session.get("pendingFrame");
+  if (!pendingFrame) return;
+  await chrome.storage.session.remove("pendingFrame");
+  if ((await chrome.action.getBadgeText({})) === "1") await chrome.action.setBadgeText({ text: "" });
+  const png = await (await fetch(pendingFrame.dataUrl)).blob();
+  await sendToStudio({ png, meta: pendingFrame.meta });
+}
+
+async function sendToStudio(frame) {
+  const response = await fetch(`${STUDIO_URL}/api/capture`, { method: "POST", headers: captureHeaders(frame.meta), body: frame.png });
+  if (!response.ok) return { ok: false };
+  const { name } = await response.json();
+  return { ok: true, name };
+}
 
 // Runs inside the page (every frame): the biggest visible video, and its
 // current frame when the page lets us read it.
@@ -68,7 +162,7 @@ function toast(message, ok) {
 }
 
 async function report(tabId, outcome, details = {}) {
-  const ok = outcome === "sent" || outcome === "saved";
+  const ok = ["sent", "saved", "starting", "pending", "timeout"].includes(outcome);
   await chrome.scripting.executeScript({ target: { tabId }, func: toast, args: [describeResult({ outcome, ...details }), ok] }).catch(() => {});
 }
 
@@ -120,14 +214,16 @@ async function capture(tab) {
   }
 
   const meta = { title: hit.title, host: hit.host, time: hit.time, method, captured_at: new Date().toISOString() };
-  try {
-    const response = await fetch(`${STUDIO_URL}/api/capture`, { method: "POST", headers: captureHeaders(meta), body: png });
-    if (!response.ok) throw new Error(await response.text());
-    const { name } = await response.json();
-    return report(tab.id, "sent", { number: Number(name.split("_")[0]) });
-  } catch {
-    // studio not running (or refused): keep the still rather than lose it
-    await chrome.downloads.download({ url: await blobToDataUrl(png), filename: fallbackFilename(new Date(), method) });
-    return report(tab.id, "saved");
-  }
+  const frame = { png, meta };
+  const result = await deliverCapture(frame, {
+    sendToStudio,
+    host,
+    waitForStudio,
+    // never lose a frame: when footsight can't take it, it goes to Downloads
+    saveToDownloads: async () => chrome.downloads.download({ url: await blobToDataUrl(png), filename: fallbackFilename(new Date(), method) }),
+    keepPending: async () => chrome.storage.session.set({ pendingFrame: { dataUrl: await blobToDataUrl(png), meta } }),
+    openPopup: () => chrome.action.openPopup().catch(() => chrome.action.setBadgeText({ text: "1" })),
+    onStarting: (started) => report(tab.id, "starting", { started }),
+  });
+  return report(tab.id, result.outcome, result);
 }

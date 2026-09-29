@@ -428,3 +428,13 @@ The next feature is overlay tools for analyzing the stills.
 - a select-and-move tool.
 **Known nits:** the linesman at the frame edge reads olive shorts. Claude Code's automatic safety check failed intermittently during the build (retries or file-editing tools got around it).
 **Next session:** The user picks the next idea. The studio session `captures/2026-09-28 22-07 test/` (6 Colombia v Portugal captures) is git-ignored test material. Reopen it with `python -m footsight.studio --open "captures/2026-09-28 22-07 test"`.
+
+## 2026-09-29, Start projects from the Chrome extension
+**What was decided:** The extension's popup starts footsight projects. Chrome launches a small helper on demand (native messaging, `footsight/host.py`), which creates the project folder where the user picks it in Finder and starts the studio in the background. ⌘⇧S with footsight off auto-starts the last project; with no project, the frame waits and the popup opens; no helper or a start over 60 s sends the frame to Downloads. The studio stops itself after 2 idle hours (never while the editor is open).
+**Why:** One click from the browser, no Terminal; the models only use memory while a project is in use.
+**What was rejected:** An always-on login item (models always in memory), a manual Terminal start (not one-click), a fixed home folder or typed paths (the user wanted to choose the location), running the studio inside the native-messaging connection (Chrome sleeps the service worker and drops it).
+
+## 2026-09-29, Choose folder and start in one step
+**What was decided:** "Choose location & start…" is a single helper request run by `background.js`; the popup also offers "Start in <last location>".
+**Why:** Chrome closes the popup when the Finder dialog takes focus, so a choose-then-Start flow inside the popup can't finish.
+**What was rejected:** A separate `choose_folder` request followed by Start in the popup (the design in the spec before the build).

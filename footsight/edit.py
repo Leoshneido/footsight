@@ -131,6 +131,8 @@ def make_server(stills: list[Still], skipped: list[str], port: int = DEFAULT_POR
                 return None
 
         def do_GET(self):
+            if studio is not None:
+                studio.touch()
             path = unquote(urlparse(self.path).path)
             if path == "/":
                 return self._send_file(EDITOR_DIR / "index.html")
@@ -222,6 +224,8 @@ def make_server(stills: list[Still], skipped: list[str], port: int = DEFAULT_POR
             self._send(200, json.dumps({"version": still.version, "corrections": fixes}).encode(), "application/json")
 
         def do_POST(self):
+            if studio is not None:
+                studio.touch()
             parts = unquote(urlparse(self.path).path).strip("/").split("/")
             if parts == ["api", "capture"] and studio is not None:
                 return self._capture()

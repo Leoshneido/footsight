@@ -13,7 +13,9 @@ import datetime
 import json
 import queue
 import re
+import signal
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -104,6 +106,7 @@ class Studio:
         self._render_lock = threading.Lock()
         self._queue: queue.Queue = queue.Queue()
         self._subscribers: list[queue.Queue] = []
+        self._last_activity = time.monotonic()
         self._worker = threading.Thread(target=self._work, daemon=True)
         self._worker.start()
 
@@ -140,6 +143,21 @@ class Studio:
     def corrections_path(self, still: Still) -> Path:
         return self.dir / f"{self.number(still)}_corrections.json"
 
+    # ---- idle tracking (a studio started from the extension stops itself) ----
+
+    def touch(self) -> None:
+        self._last_activity = time.monotonic()
+
+    def idle_seconds(self) -> float:
+        return time.monotonic() - self._last_activity
+
+    def should_stop_for_idle(self, idle_minutes: float) -> bool:
+        """Idle for longer than idle_minutes (0 = never) with no editor page
+        open -- an open editor listens for events and counts as in use."""
+        with self._lock:
+            watched = bool(self._subscribers)
+        return idle_minutes > 0 and not watched and self.idle_seconds() > idle_minutes * 60
+
     # ---- capture and processing ----
 
     def _register(self, number: str) -> Still:
@@ -148,6 +166,7 @@ class Studio:
         return still
 
     def capture(self, png: bytes, meta: dict) -> Still:
+        self.touch()
         with self._lock:
             number = f"{len(self.stills) + 1:03d}"
             (self.dir / "originals" / f"{number}.png").write_bytes(png)
@@ -186,6 +205,7 @@ class Studio:
     def correct(self, still: Still, data) -> dict:
         """Apply the editor's fixes: re-render from the cached analysis (a
         couple of seconds, no models), then save them."""
+        self.touch()
         fixes = validate_corrections(data)
         analysis = json.loads(self.analysis_path(still).read_text())
         with self._render_lock:
@@ -226,6 +246,8 @@ def main() -> None:
     group.add_argument("--open", dest="open_dir", help="Reopen a past session folder")
     parser.add_argument("--port", type=int, default=edit.DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--idle-minutes", type=float, default=0,
+                        help="Stop after this many idle minutes with no editor open (0 = never)")
     args = parser.parse_args()
 
     from footsight import pipeline, pitch_calibration, player_detection, pose
@@ -253,6 +275,20 @@ def main() -> None:
     print(f"Editor: {url}  (Ctrl-C to stop)")
     if not args.no_browser:
         webbrowser.open(url)
+
+    def shut_down(*_):  # SIGTERM (Stop footsight) or idle: stop serving, then clean up below
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, shut_down)
+
+    def watch_idle():
+        while True:
+            time.sleep(30)
+            if studio.should_stop_for_idle(args.idle_minutes):
+                print(f"Idle for {args.idle_minutes:g} minutes -- stopping.")
+                return shut_down()
+
+    threading.Thread(target=watch_idle, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

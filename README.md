@@ -43,6 +43,11 @@ Options:
 
 ## Capture studio (Chrome extension + live processing)
 
+The usual way in is the Chrome extension: click its icon, start a project
+(Finder asks where to put it), then press **⌘⇧S** on the match page. The
+extension starts footsight itself; see `extension/README.md` for the one-time
+setup (`python -m footsight.setup_chrome`). From Terminal instead:
+
     python -m footsight.studio --session "Barca v Feyenoord"
 
 Loads the models once, opens the editor, and waits for stills from the

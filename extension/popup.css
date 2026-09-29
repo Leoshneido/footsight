@@ -1,0 +1,48 @@
+:root {
+  --bg: #0f1423;
+  --panel: #182038;
+  --text: #f2f4f8;
+  --muted: #9aa3b8;
+  --accent: #FFD60A;
+  --danger: #FF3B30;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 320px;
+  padding: 14px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, sans-serif;
+}
+header { margin-bottom: 10px; }
+.logo { font-weight: 800; font-size: 18px; color: var(--accent); letter-spacing: 0.5px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin: 14px 0 6px; }
+p { margin: 6px 0; }
+.muted { color: var(--muted); }
+#message { padding: 8px 10px; border-radius: 6px; background: #5a1111; border: 1px solid var(--danger); white-space: pre-wrap; font-size: 12px; }
+#message.info { background: var(--panel); border-color: var(--accent); }
+input[type=text] {
+  width: 100%; padding: 7px 9px; border-radius: 6px; border: 1px solid #2c3656;
+  background: var(--panel); color: var(--text); font: inherit;
+}
+button {
+  display: block; width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 6px;
+  border: 1px solid #2c3656; background: var(--panel); color: var(--text);
+  font: 600 13px system-ui, sans-serif; cursor: pointer; text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #111; }
+button.danger:hover { border-color: var(--danger); color: var(--danger); }
+code {
+  display: block; padding: 8px; border-radius: 6px; background: var(--panel);
+  font: 12px ui-monospace, Menlo, monospace; word-break: break-all;
+}
+ul { list-style: none; padding: 0; margin: 0; }
+li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #222b45; }
+li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+li .count { color: var(--muted); font-size: 12px; }
+li button { width: auto; margin: 0; padding: 4px 8px; }
+.counts { display: flex; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.counts b { color: var(--text); }

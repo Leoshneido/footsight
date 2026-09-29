@@ -35,10 +35,16 @@ export function fallbackFilename(date, method) {
   return `footsight-captures/still-${stamp}-${method}.png`;
 }
 
-export function describeResult({ outcome, number, reason }) {
+export function describeResult({ outcome, number, reason, started }) {
   switch (outcome) {
     case "sent":
-      return `Sent to footsight ✓ (still ${number})`;
+      return started ? `Started "${started}" — sent to footsight ✓ (still ${number})` : `Sent to footsight ✓ (still ${number})`;
+    case "starting":
+      return `Starting footsight on "${started}"… (this takes a few seconds)`;
+    case "pending":
+      return "No footsight project yet. Start a project in the footsight popup — this frame will go into it.";
+    case "timeout":
+      return "footsight took too long to start — saved to Downloads/footsight-captures instead";
     case "saved":
       return "footsight studio isn't running — saved to Downloads/footsight-captures instead";
     case "black":
@@ -48,4 +54,74 @@ export function describeResult({ outcome, number, reason }) {
     default:
       return `Capture failed: ${reason || "unknown error"}`;
   }
+}
+
+// Which screen the popup shows, from the helper's status reply (or the
+// error Chrome gives when the helper isn't registered yet).
+export function popupState(reply, error) {
+  if (error) return /not found|forbidden/i.test(error.message || "") ? "setup" : "error";
+  if (!reply || !reply.ok) return "error";
+  if (reply.running) return "running";
+  return reply.starting ? "starting" : "off";
+}
+
+export function defaultProjectName(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `Match ${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+const stillNumber = (name) => Number(String(name).split("_")[0]);
+
+// ⌘⇧S: get the frame into footsight, starting it if needed. `deps` are the
+// Chrome-side pieces (see background.js):
+//   sendToStudio(frame) -> {ok, name}   host(message) -> reply (throws if no helper)
+//   waitForStudio() -> bool             saveToDownloads(frame)
+//   keepPending(frame)                  openPopup()
+//   onStarting(projectName)  (optional: tell the page footsight is starting)
+export async function deliverCapture(frame, deps) {
+  const send = async () => {
+    try {
+      return await deps.sendToStudio(frame);
+    } catch {
+      return { ok: false };
+    }
+  };
+  let reply = await send();
+  if (reply.ok) return { outcome: "sent", number: stillNumber(reply.name) };
+
+  let status;
+  try {
+    status = await deps.host({ cmd: "status" });
+  } catch {
+    await deps.saveToDownloads(frame); // helper not set up: never lose the frame
+    return { outcome: "saved" };
+  }
+
+  let started;
+  if (!status.running && !status.starting) {
+    const { projects = [] } = await deps.host({ cmd: "recent" });
+    if (!projects.length) {
+      await deps.keepPending(frame);
+      await deps.openPopup();
+      return { outcome: "pending" };
+    }
+    const opened = await deps.host({ cmd: "open", path: projects[0].path });
+    if (!opened.ok) {
+      await deps.saveToDownloads(frame);
+      return { outcome: "saved" };
+    }
+    started = projects[0].name;
+    await deps.onStarting?.(started);
+  }
+
+  if (!(await deps.waitForStudio())) {
+    await deps.saveToDownloads(frame);
+    return { outcome: "timeout" };
+  }
+  reply = await send();
+  if (!reply.ok) {
+    await deps.saveToDownloads(frame);
+    return { outcome: "saved" };
+  }
+  return started ? { outcome: "sent", number: stillNumber(reply.name), started } : { outcome: "sent", number: stillNumber(reply.name) };
 }

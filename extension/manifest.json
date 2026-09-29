@@ -1,15 +1,33 @@
 {
   "manifest_version": 3,
   "name": "footsight",
-  "version": "1.0",
-  "description": "Capture the current video frame and send it to footsight studio (⌘⇧S).",
-  "permissions": ["activeTab", "scripting", "downloads"],
-  "host_permissions": ["http://127.0.0.1:8765/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_title": "footsight: capture still (⌘⇧S)" },
+  "version": "1.1",
+  "description": "Start footsight projects and capture video frames into them (⌘⇧S).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAri+8si2T5z/7xQqZgU5xitbGOh9kPleIt/m2lm2W2CGcotTjk88JIDLVNSmzWVxvr4CJSXLbZooYQUhfQJRwo9A9RpdZofXCNLjui5idiPjAhbT8bbL6lmgIyAtxL+c4MbU34ksFXd+1PrzsaNeckfUuQ+N4aKZp1AL2j9l8ekaI8UJLLu7zm/Hh63EYqsmuTOSWVVerU8k2Masg0UvVb5pHmPntXHqpjlhcZ9zFG9TlrTyBdiCOCGZwVbHc7JFJrPrcBGpBpemlw3KCv74L31LgIvfJFwsUNdHganDNUKTftEqRa0TEbmbm+KS10T0yR6ynIfDzn8M8ZP0xKFJ+cQIDAQAB",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "nativeMessaging",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8765/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "footsight",
+    "default_popup": "popup.html"
+  },
   "commands": {
     "capture": {
-      "suggested_key": { "default": "Alt+Shift+S", "mac": "Command+Shift+S" },
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Command+Shift+S"
+      },
       "description": "Capture the current video frame for footsight"
     }
   }

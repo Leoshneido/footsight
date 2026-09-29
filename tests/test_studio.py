@@ -236,3 +236,48 @@ def test_side_choices_are_validated():
         validate_corrections({"sides": {"20": "coach"}})
     with pytest.raises(ValueError):
         validate_corrections({"sides": {"x": "team_a"}})
+
+
+def test_the_studio_counts_idle_time_from_the_last_activity(tmp_path, fake, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(studio_module.time, "monotonic", lambda: clock[0])
+    s = Studio(tmp_path / "session", fake.analyze, fake.render)
+    try:
+        clock[0] += 600
+        assert s.idle_seconds() == pytest.approx(600)
+        s.touch()
+        assert s.idle_seconds() == pytest.approx(0)
+        s.capture(_png(), {})  # a capture is activity too
+        clock[0] += 30
+        assert s.idle_seconds() == pytest.approx(30)
+    finally:
+        s.stop()
+
+
+def test_the_studio_stops_itself_only_when_idle_and_no_editor_is_open(tmp_path, fake, monkeypatch):
+    """Started from the extension, the studio shuts down after a long idle
+    spell so it doesn't hold the models in memory forever -- but never while
+    an editor page is open (listening for events)."""
+    clock = [0.0]
+    monkeypatch.setattr(studio_module.time, "monotonic", lambda: clock[0])
+    s = Studio(tmp_path / "session", fake.analyze, fake.render)
+    try:
+        assert not s.should_stop_for_idle(idle_minutes=120)
+        clock[0] += 121 * 60
+        assert s.should_stop_for_idle(idle_minutes=120)
+        editor = s.subscribe()
+        assert not s.should_stop_for_idle(idle_minutes=120)
+        s.unsubscribe(editor)
+        assert not s.should_stop_for_idle(idle_minutes=0)  # 0 = never
+    finally:
+        s.stop()
+
+
+def test_every_request_to_the_server_counts_as_activity(running, monkeypatch):
+    s, httpd = running
+    clock = [5000.0]
+    monkeypatch.setattr(studio_module.time, "monotonic", lambda: clock[0])
+    s.touch()
+    clock[0] += 900
+    _request(httpd, "GET", "/api/stills")
+    assert s.idle_seconds() == pytest.approx(0)
