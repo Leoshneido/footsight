@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "footsight",
+  "version": "1.0",
+  "description": "Capture the current video frame and send it to footsight studio (⌘⇧S).",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "host_permissions": ["http://127.0.0.1:8765/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "footsight: capture still (⌘⇧S)" },
+  "commands": {
+    "capture": {
+      "suggested_key": { "default": "Alt+Shift+S", "mac": "Command+Shift+S" },
+      "description": "Capture the current video frame for footsight"
+    }
+  }
+}

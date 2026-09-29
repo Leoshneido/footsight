@@ -207,3 +207,64 @@ export function parseOverlays(text) {
   }
   return { overlays: data.overlays, spotlight: Boolean(data.spotlight) };
 }
+
+// ---- studio fixes ----
+
+// The camera view is the still enlarged `scale` times; corrections are in
+// the original still's pixels.
+export function imageToStill([x, y], scale) {
+  return [x / scale, y / scale];
+}
+
+// The corrections after one fix, as a new object (the old one stays in the
+// undo history). Added players get their ids from the studio; removing one
+// takes it back out of `added` instead of listing it as removed.
+export function nextCorrections(corrections, action) {
+  const next = {
+    removed: [...(corrections.removed || [])],
+    added: (corrections.added || []).map((a) => ({ ...a })),
+    ball: { ...(corrections.ball || { mode: "auto" }) },
+    sides: { ...(corrections.sides || {}) },
+  };
+  switch (action.type) {
+    case "remove":
+      if (next.added.some((a) => a.id === action.id)) next.added = next.added.filter((a) => a.id !== action.id);
+      else if (!next.removed.includes(action.id)) next.removed.push(action.id);
+      break;
+    case "add":
+      next.added.push({ feet: action.feet, category: action.category });
+      break;
+    case "ball":
+      next.ball = { mode: "set", pixel: action.pixel };
+      break;
+    case "ball-none":
+      next.ball = { mode: "none" };
+      break;
+    case "side": {
+      const added = next.added.find((a) => a.id === action.id);
+      if (added) added.category = action.category;
+      else next.sides[action.id] = action.category;
+      break;
+    }
+    default:
+      throw new Error(`Unknown fix: ${action.type}`);
+  }
+  return next;
+}
+
+// Drawings tied to players who no longer exist are dropped; a link keeps
+// its remaining players while at least two are left.
+export function dropOverlaysFor(overlays, keepIds) {
+  const out = [];
+  for (const o of overlays) {
+    if ((o.type === "ring" || o.type === "tag") && !keepIds.has(o.player)) continue;
+    if (o.type === "link") {
+      const players = o.players.filter((id) => keepIds.has(id));
+      if (players.length < 2) continue;
+      out.push({ ...o, players });
+      continue;
+    }
+    out.push(o);
+  }
+  return out;
+}

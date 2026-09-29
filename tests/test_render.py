@@ -369,3 +369,22 @@ def test_category_kit_boosts_a_detected_kit_and_falls_back_to_the_fixed_palette(
     kits = {"team_a": ((156, 62, 45), (240, 240, 240))}
     assert category_kit("team_a", kits) == (vivid_kit_color((156, 62, 45)), (240, 240, 240))
     assert category_kit("goalkeeper", {}) == (GOALKEEPER_COLOR, DEFAULT_SHORTS_COLOR)
+
+
+def test_player_icon_accepts_a_numpy_size():
+    """An added player's size comes out of a numpy fit; Pillow's blur can't
+    take a numpy float as its radius (it compares it to a tuple)."""
+    import numpy as np
+    from footsight.render import draw_player_icon
+
+    image = Image.new("RGB", (200, 200), (40, 110, 40))
+    draw_player_icon(image, (100.0, 150.0), (245, 130, 30), (240, 240, 240), np.float64(2.0))
+
+
+def test_render_pitch_draws_a_player_in_their_own_colors_when_given(tmp_path):
+    output_path = tmp_path / "mockup.png"
+    render_pitch([((0.0, 0.0), "referee")], str(output_path), image_width_px=2100, margin_px=80,
+                 player_kits=[((30, 40, 30), (20, 20, 20))])
+
+    near = _icon_pixels(Image.open(output_path).convert("RGB"), (0.0, 0.0), image_width_px=2100, margin_px=80)
+    assert (30, 40, 30) in near and CATEGORY_COLORS["referee"] not in near

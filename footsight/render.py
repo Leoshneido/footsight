@@ -220,6 +220,7 @@ def draw_player_icon(image, position_px, shirt, shorts, unit_px):
     at the icon's feet, not on its shirt. unit_px is the size of one
     drawing unit on the final image.
     """
+    unit_px = float(unit_px)  # a numpy float breaks Pillow's blur radius
     unit = unit_px * SUPERSAMPLE
     tile_half_px = math.ceil(ICON_TILE_HALF_UNITS * unit_px)
     tile_half = tile_half_px * SUPERSAMPLE
@@ -341,9 +342,12 @@ def render_pitch(
     player_height_m: float = PLAYER_HEIGHT_M,
     ball_radius_m: float = BALL_RADIUS_M,
     kit_colors: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] | None = None,
+    player_kits: list | None = None,
 ) -> None:
     """kit_colors maps a category to its detected (shirt, shorts) colors;
-    any category not in it is drawn in its fixed CATEGORY_COLORS shirt."""
+    any category not in it is drawn in its fixed CATEGORY_COLORS shirt.
+    player_kits, aligned with player_positions, gives a player their own
+    (shirt, shorts) -- officials drawn in what they actually wear -- or None."""
     kit_colors = kit_colors or {}
     scale = (image_width_px - 2 * margin_px) / pitch_length
     image_height_px = int(pitch_width * scale) + 2 * margin_px
@@ -352,9 +356,10 @@ def render_pitch(
     draw_markings(image, pitch_length, pitch_width, margin_px, scale)
 
     icon_unit_px = player_height_m * ICON_SIZE_FACTOR * scale / ICON_HEIGHT_UNITS
-    for position, category in player_positions:
+    for index, (position, category) in enumerate(player_positions):
         px, py = pitch_to_image_coords(position, pitch_length, pitch_width, image_width_px, margin_px)
-        shirt, shorts = category_kit(category, kit_colors)
+        own = player_kits[index] if player_kits and index < len(player_kits) else None
+        shirt, shorts = own if own else category_kit(category, kit_colors)
         draw_player_icon(image, (px, py), shirt, shorts, icon_unit_px)
 
     if ball_position is not None:

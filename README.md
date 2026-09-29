@@ -41,6 +41,28 @@ Options:
   ones (e.g. a broadcaster watermark) to remove them before the team split.
   Click again to restore. Enter accepts, Esc keeps everything.
 
+## Capture studio (Chrome extension + live processing)
+
+    python -m footsight.studio --session "Barca v Feyenoord"
+
+Loads the models once, opens the editor, and waits for stills from the
+footsight Chrome extension (see `extension/README.md` to load it): on the match
+page press **⌘⇧S** and the frame is sent at full resolution, processed in the
+background, and appears in the editor when ready (about 15 s). Everything for
+the session goes to `captures/<date time> <name>/` (originals, both images,
+analysis cache, fixes). Reopen a past session with
+`python -m footsight.studio --open "captures/<folder>"`.
+
+In the studio the editor also has fix tools, each redone in a few seconds
+(and undoable):
+
+| Key | Fix |
+|---|---|
+| X | Remove a wrong detection (watermark, ball boy, coach) |
+| N | Add a missed player: click their feet, pick the side (1-4) |
+| O | Click to place/move the ball; Shift+click removes it |
+| V | Put a player on the right side (team, keeper, referee) |
+
 ## Overlay editor (live telestrator)
 
     python -m footsight.edit out/match/

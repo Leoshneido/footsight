@@ -93,9 +93,9 @@ def test_camera_view_draws_players_after_the_boards(still, tmp_path, monkeypatch
     """Players stand in front of the ad boards -- the linesman on the far
     touchline must not be hidden behind them."""
     calls = []
-    real_boards, real_icon = camera_view._draw_boards, camera_view.draw_player_icon
+    real_boards, real_player = camera_view._draw_boards, camera_view.draw_posed_player
     monkeypatch.setattr(camera_view, "_draw_boards", lambda *a, **k: (calls.append("boards"), real_boards(*a, **k)))
-    monkeypatch.setattr(camera_view, "draw_player_icon", lambda *a, **k: (calls.append("player"), real_icon(*a, **k)))
+    monkeypatch.setattr(camera_view, "draw_posed_player", lambda *a, **k: (calls.append("player"), real_player(*a, **k)))
 
     real_goals = camera_view._draw_goals
     monkeypatch.setattr(camera_view, "_draw_goals", lambda *a, **k: (calls.append("goals"), real_goals(*a, **k)))
@@ -106,20 +106,25 @@ def test_camera_view_draws_players_after_the_boards(still, tmp_path, monkeypatch
     assert calls == ["boards", "goals", "player"]
 
 
-def test_camera_view_draws_the_standing_figure_when_there_is_no_pose(still, tmp_path, monkeypatch):
+def test_camera_view_draws_a_standing_pose_when_there_is_no_pose(still, tmp_path, monkeypatch):
+    """Players with no usable pose (tangled, or added by hand) are drawn in
+    the same posed-figure style as everyone else, standing -- the old chunky
+    icon at 105% of the box looked a quarter taller than its neighbours."""
+    from footsight.posed_figure import standing_pose
+
     drawn = []
-    monkeypatch.setattr(camera_view, "draw_player_icon", lambda image, feet, shirt, shorts, unit: drawn.append(feet))
-    monkeypatch.setattr(camera_view, "draw_posed_player", lambda *a: pytest.fail("no pose to draw"))
+    monkeypatch.setattr(camera_view, "draw_posed_player", lambda image, pose, height, shirt, shorts: drawn.append((pose, height)))
 
     render_camera_view(still, H, [_person((290, 200, 310, 260))], None, str(tmp_path / "c.png"))
 
-    assert drawn == [pytest.approx((450.0, 390.0))]  # feet, in 1.5x pixels
+    [(pose, height)] = drawn
+    assert height == pytest.approx(90.0)
+    assert pose == pytest.approx(standing_pose((435.0, 300.0, 465.0, 390.0)))  # the box in 1.5x pixels
 
 
 def test_camera_view_poses_a_player_with_a_trusted_pose(still, tmp_path, monkeypatch):
     posed = []
     monkeypatch.setattr(camera_view, "draw_posed_player", lambda image, pose, height, shirt, shorts: posed.append((pose, height)))
-    monkeypatch.setattr(camera_view, "draw_player_icon", lambda *a: pytest.fail("pose should be used"))
     pose = np.column_stack([np.full(17, 300.0), np.linspace(200, 260, 17), np.full(17, 0.9)])
 
     render_camera_view(still, H, [_person((290, 200, 310, 260), pose=pose)], None, str(tmp_path / "c.png"))
@@ -268,3 +273,17 @@ def test_scene_file_records_the_ball(still, tmp_path):
 
     assert ball["pixel"] == pytest.approx([450.0, 375.0])
     assert ball["m"] == pytest.approx(list(_to_pitch(scaled_homography(H, 1.5), (450.0, 375.0))))
+
+
+def test_scene_uses_stable_player_ids_and_carries_scale_and_kits(still, tmp_path):
+    import json
+
+    kits = {"team_a": ((245, 130, 30), (240, 240, 240)), "goalkeeper": ((0, 230, 120), (30, 30, 30))}
+    out = tmp_path / "out_camera.png"
+    render_camera_view(still, H, [_person((290, 200, 310, 260)), _person((100, 300, 120, 390))], None, str(out),
+                       player_ids=[4, 1000], kits=kits)
+    scene = json.loads(open(camera_view.layer_paths(str(out))["scene"]).read())
+
+    assert [p["id"] for p in scene["players"]] == [4, 1000]
+    assert scene["scale"] == 1.5
+    assert scene["kits"]["team_a"] == {"shirt": [245, 130, 30], "shorts": [240, 240, 240]}

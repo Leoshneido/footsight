@@ -16,13 +16,11 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from footsight.posed_figure import draw_posed_player
+from footsight.posed_figure import draw_posed_player, standing_pose
 from footsight.render import (
-    ICON_HEIGHT_UNITS,
     PLAYER_HEIGHT_M,
     draw_ball,
     draw_markings,
-    draw_player_icon,
     grass_image,
 )
 
@@ -66,9 +64,6 @@ CROWD_DARKEN = 0.8
 CROWD_PX_PER_DOT = 160
 CROWD_SEED = 11
 
-# The standing figure is drawn a little taller than its detection box, which
-# stops at the top of the head rather than including the hair.
-ICON_BOX_FACTOR = 1.05
 # Ball: larger than life (0.11 m) so it stays visible, never below a floor;
 # 0.3 m read as a third of a player's height near the camera.
 BALL_RADIUS_M = 0.16
@@ -312,6 +307,8 @@ def render_camera_view(
     ball_pixel,
     output_path: str,
     scale: float = DEFAULT_SCALE,
+    player_ids=None,
+    kits=None,
 ) -> None:
     """Write the camera-angle view.
 
@@ -356,10 +353,8 @@ def render_camera_view(
             draw_ball(image, (item[0], item[1] - radius), radius)
             continue
         (x1, y1, x2, y2), shirt, shorts, pose = item
-        if pose is not None:
-            draw_posed_player(image, pose, y2 - y1, shirt, shorts)
-        else:
-            draw_player_icon(image, ((x1 + x2) / 2, y2), shirt, shorts, (y2 - y1) * ICON_BOX_FACTOR / ICON_HEIGHT_UNITS)
+        # no usable pose (tangled, or added by hand): the same figure, standing
+        draw_posed_player(image, pose if pose is not None else standing_pose((x1, y1, x2, y2)), y2 - y1, shirt, shorts)
 
     layers = layer_paths(output_path)
     full = background.convert("RGBA")
@@ -367,17 +362,18 @@ def render_camera_view(
     full.convert("RGB").save(output_path)
     background.save(layers["background"])
     figures.save(layers["figures"])
-    _write_scene(layers, width, height, H, scaled, people, ball_pixel, scale)
+    _write_scene(layers, width, height, H, scaled, people, ball_pixel, scale, player_ids, kits)
 
 
-def _write_scene(layers, width, height, H, scaled, people, ball_pixel, scale) -> None:
+def _write_scene(layers, width, height, H, scaled, people, ball_pixel, scale, player_ids=None, kits=None) -> None:
     """The scene file the overlay editor reads: players (camera-view pixels
     and pitch metres) and the camera geometry both ways."""
     players = []
+    ids = list(player_ids) if player_ids is not None else list(range(len(people)))
     for index, ((box, shirt, shorts, _), (_, category, _, _)) in enumerate(zip(scaled, people)):
         feet = ((box[0] + box[2]) / 2, box[3])
         players.append({
-            "id": index,
+            "id": int(ids[index]),
             "category": category,
             "shirt": [int(c) for c in shirt],
             "shorts": [int(c) for c in shorts],
@@ -398,6 +394,11 @@ def _write_scene(layers, width, height, H, scaled, people, ball_pixel, scale) ->
             "figures": Path(layers["figures"]).name,
         },
         "pitch": {"length": PITCH_LENGTH_M, "width": PITCH_WIDTH_M},
+        "scale": scale,
+        "kits": {
+            category: {"shirt": [int(c) for c in shirt], "shorts": [int(c) for c in shorts]}
+            for category, (shirt, shorts) in (kits or {}).items()
+        },
         "image_to_pitch": H.tolist(),
         "pitch_to_image": np.linalg.inv(H).tolist(),
         "players": players,

@@ -72,6 +72,23 @@ body.toolbar-hidden #toolbar-tab { display: flex; }
   background: rgba(15, 20, 35, 0.92); border: 2px solid var(--yellow); border-radius: 8px; padding: 6px 10px; width: 220px;
 }
 
+#team-chooser {
+  position: fixed; z-index: 4; display: flex; flex-direction: column; gap: 6px; width: 190px;
+  background: rgba(15, 20, 35, 0.96); border: 1px solid var(--bar-line); border-radius: 10px; padding: 10px;
+}
+#team-chooser[hidden] { display: none; }
+#team-chooser span { font-size: 13px; color: var(--muted); }
+#team-chooser i { width: 16px; height: 16px; border-radius: 50%; border: 3px solid transparent; flex: none; }
+#team-chooser button { justify-content: flex-start; }
+#team-chooser kbd { margin-left: auto; }
+
+#stage-status {
+  position: fixed; top: 50%; left: calc((100% - var(--panel)) / 2); transform: translate(-50%, -50%); z-index: 2;
+  font-size: 22px; color: var(--text); background: rgba(15, 20, 35, 0.9); border: 1px solid var(--bar-line);
+  border-radius: 10px; padding: 16px 24px; text-align: center; max-width: 60%;
+}
+body.toolbar-hidden #stage-status { left: 50%; }
+
 #notice {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5;
   background: rgba(15, 20, 35, 0.94); border: 1px solid var(--bar-line); border-radius: 8px;

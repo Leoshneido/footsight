@@ -69,7 +69,11 @@ def test_api_lists_stills_and_skipped(server):
     status, kind, data = _request(server, "GET", "/api/stills")
 
     assert status == 200 and kind.startswith("application/json")
-    assert json.loads(data) == {"stills": [{"id": 0, "name": "a_camera", "has_overlays": False}], "skipped": ["b_camera"]}
+    assert json.loads(data) == {
+        "stills": [{"id": 0, "name": "a_camera", "has_overlays": False, "status": "ready", "error": None, "version": 0}],
+        "skipped": ["b_camera"],
+        "studio": False,
+    }
 
 
 def test_api_serves_scene_and_layers(server, folder):
@@ -152,3 +156,16 @@ def test_the_toolbar_can_be_hidden_and_brought_back(server):
 
     assert 'id="hide-toolbar" type="checkbox"' in page
     assert 'id="toolbar-tab"' in page
+
+
+def test_the_editor_has_fix_tools_for_studio_stills(server):
+    """Remove (X), add (N) and ball (O) fixes, plus the side chooser for an
+    added player and a placeholder for stills still being processed. The
+    fix tools stay hidden unless footsight studio is serving the editor."""
+    page = _request(server, "GET", "/")[2].decode()
+
+    for tool in ("remove", "add", "ball", "side"):
+        assert f'data-tool="{tool}"' in page
+    assert 'id="fix-tools" hidden' in page
+    assert 'id="team-chooser"' in page
+    assert 'id="stage-status"' in page

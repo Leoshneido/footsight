@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from PIL import Image
 
 from footsight.posed_figure import draw_posed_player
@@ -63,3 +64,19 @@ def test_posed_player_draws_shorts_below_the_hips():
     upper_thigh = (int(round(hip[0] + (knee[0] - hip[0]) * 0.25)), int(round(hip[1] + (knee[1] - hip[1]) * 0.25)))
 
     assert image.getpixel(upper_thigh) == SHORTS
+
+
+def test_standing_pose_has_the_proportions_of_real_players():
+    """Measured from 106 reliable poses on the sample stills and captures:
+    nose ~11.5% down the box, hips ~49%, ankles ~87% -- which is why a
+    posed figure is drawn shorter than its box, and why the standing pose
+    must use the same proportions to match its neighbours."""
+    from footsight.posed_figure import standing_pose
+
+    pose = standing_pose((100.0, 200.0, 140.0, 300.0))
+    assert pose.shape == (17, 3) and (pose[:, 2] > 0.3).all()
+    assert pose[0, :2] == pytest.approx((120.0, 211.5), abs=0.5)  # nose
+    assert pose[15, 1] == pytest.approx(287.4, abs=0.5) and pose[16, 1] == pytest.approx(287.4, abs=0.5)  # ankles
+    # left and right mirror each other about the box's centre line
+    for left, right in ((5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (15, 16)):
+        assert pose[left, 0] - 120.0 == pytest.approx(120.0 - pose[right, 0])

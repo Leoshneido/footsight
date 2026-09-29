@@ -52,6 +52,8 @@ classifier labels `officials` renders as `referee`.
 
 ## Team split (the part most likely to break)
 
+(2026-09-28: steps 2-3 below were replaced -- grass hue is measured per still and the stray trim is circular; see MEMORY.md. `STRAY_HUE_DISTANCE` = 40, `GRASS_HUE_TOLERANCE` = 6.)
+
 1. Torso sample = middle third of box height x middle half of width.
 2. Drop grass pixels (OpenCV hue 40-60); keep all if nothing remains.
 3. Per player compute **two** hues:
@@ -71,6 +73,18 @@ striped teams spread widely on the circle.
 - **Ball boys** behind the touchline get detected as players (11.58.59, 12.00.14). They project about 5.5 m past the line and are dropped before the team split. The 5 m margin clears them by less than 1 m, so check where a box projects before calling it a player.
 - Generic detectors (COCO) miss the ~12 px ball; a learned ball model flags spare balls by the touchline. Classical detection + manual fallback is the standing choice.
 - Before changing a jersey feature, inspect per-player hue histograms -- that is what exposed the 50/50 striped-kit split.
+
+## Capture studio
+
+- `pipeline.analyze(...) -> dict` (slow, JSON-ready: homography, detections with **stable ids** = detector order, poses keyed by id, auto `ball_pixel`) + `pipeline.render_still(input, analysis, out, corrections)` (fast: removed ids out before the team split, added players 1000+ with a 1.8 m x 0.4 box from `camera_view.vertical_scale`, not clustered; ball auto|set|none). `run()` = analyze + review callbacks turned into corrections + render_still. (`render_still`, not `render`: `pipeline.render` is the renderer module.)
+- `footsight/studio.py`: `Studio(session_dir, analyze, render)` -- one worker thread, FIFO; files `originals/NNN.png` (+ `NNN.json` page meta), `NNN.png` / `NNN_camera*` outputs, `NNN_analysis.json`, `NNN_corrections.json`; statuses queued/processing/ready/failed; `Studio.open` for past sessions; `validate_corrections` assigns added ids. `main()` loads models once; port 8765 fixed (extension expects it).
+- `edit.make_server(..., studio=)` adds `POST /api/capture` (needs `X-Footsight-Capture: 1` + `Origin: chrome-extension://`, PNG ≤ 50 MB, percent-encoded JSON meta header), `GET /api/events` (server-sent events), `GET/POST /api/stills/<id>/corrections` (validation -> 400, render failure -> 500). Scene gains stable `id`s, `scale`, `kits`.
+- Officials (referee/assistant) are drawn in the kit they actually wear (`team_classification.official_kits`, per person), or `pipeline.NEUTRAL_OFFICIAL_KIT` (charcoal) when hand-added or when their kit is < 60 RGB from a team's shirt. `render_pitch(player_kits=...)` carries per-person colors to the top-down mockup.
+- Corrections also carry `sides: {"<id>": category}` (V tool): the user's side wins over detection role and color, for detected players; an added player's side is its own `category`.
+- Players with no usable pose (tangled, added) are drawn by `draw_posed_player` with `posed_figure.standing_pose(box)` (median proportions of 106 real poses), not the old icon, so every camera-view figure shares one style and size.
+- Editor: fix tools X/N/O/V only when `studio: true`; fixes are in the undo history (overlays + corrections snapshot); drawings on removed players dropped (`dropOverlaysFor`); layer URLs carry `?v=<version>`; non-ready stills show a placeholder.
+- `extension/` (MV3, unpacked): ⌘⇧S / Alt+Shift+S; video frame first, cropped tab screenshot as fallback, "protected" if both black; falls back to Downloads/footsight-captures when the studio is down. `capture-core.js` tested with node.
+- Real run: 4 stills as extension captures processed in 68 s; remove/add fixes ~4 s each; reopen keeps ready stills without reprocessing.
 
 ## Overlay editor
 

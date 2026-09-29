@@ -33,6 +33,31 @@ SHORTS_DOWN_THIGH = 0.5  # shorts cover the upper half of the thigh
 SOCKS_FROM = 0.4  # socks cover the calf from 40% of the way down
 
 
+# A player standing facing the camera, as fractions of the detection box:
+# (x from the box's centre line, y from its top), both in box heights.
+# Medians of 106 reliable real poses (sample stills and the Colombia v
+# Portugal captures), mirrored left/right. Used for players with no usable
+# pose -- tangled, or added by hand -- so they match their neighbours.
+STANDING_POSE = [
+    (0.000, 0.115),                     # nose
+    (0.015, 0.098), (-0.015, 0.098),    # eyes (left, right)
+    (0.034, 0.107), (-0.034, 0.107),    # ears
+    (0.069, 0.208), (-0.069, 0.208),    # shoulders
+    (0.109, 0.345), (-0.109, 0.345),    # elbows
+    (0.096, 0.455), (-0.096, 0.455),    # wrists
+    (0.044, 0.488), (-0.044, 0.488),    # hips
+    (0.046, 0.682), (-0.046, 0.682),    # knees
+    (0.052, 0.874), (-0.052, 0.874),    # ankles
+]
+
+
+def standing_pose(box) -> np.ndarray:
+    """STANDING_POSE placed in a box: a (17, 3) pose, all joints confident."""
+    x1, y1, x2, y2 = box
+    height, centre = y2 - y1, (x1 + x2) / 2
+    return np.array([(centre + dx * height, y1 + dy * height, 1.0) for dx, dy in STANDING_POSE])
+
+
 def draw_posed_player(image: Image.Image, pose: np.ndarray, height_px: float, shirt, shorts) -> None:
     """Paint a posed figure onto image. pose is (17, 3): joint x, y in image
     pixels and confidence, COCO keypoint order."""

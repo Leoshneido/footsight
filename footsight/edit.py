@@ -9,6 +9,7 @@ exports a PNG or saves their overlays.
 """
 import argparse
 import json
+import queue
 import webbrowser
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -40,6 +41,9 @@ class Still:
 
     name: str
     folder: Path
+    status: str = "ready"  # the studio adds: queued, processing, failed
+    error: str | None = None
+    version: int = 0  # bumped on every (re-)render, so the editor reloads images
 
     def path(self, suffix: str) -> Path:
         return self.folder / f"{self.name}{suffix}"
@@ -82,13 +86,27 @@ def find_stills(path) -> tuple[list[Still], list[str]]:
     return stills, skipped
 
 
+def still_info(index: int, still: Still) -> dict:
+    return {
+        "id": index,
+        "name": still.name,
+        "has_overlays": still.overlays.exists(),
+        "status": still.status,
+        "error": still.error,
+        "version": still.version,
+    }
+
+
 def _valid_overlays(data) -> bool:
     if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("overlays"), list):
         return False
     return all(isinstance(o, dict) and o.get("type") in OVERLAY_TYPES for o in data["overlays"])
 
 
-def make_server(stills: list[Still], skipped: list[str], port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
+def make_server(stills: list[Still], skipped: list[str], port: int = DEFAULT_PORT, studio=None,
+                fallback_port: bool = True) -> ThreadingHTTPServer:
+    """With a studio (footsight.studio), the server also takes captures from
+    the Chrome extension, applies editor fixes and streams live still events."""
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep the terminal quiet while recording
             pass
@@ -126,10 +144,18 @@ def make_server(stills: list[Still], skipped: list[str], port: int = DEFAULT_POR
             parts = path.strip("/").split("/")
             if parts == ["api", "stills"]:
                 listing = {
-                    "stills": [{"id": i, "name": s.name, "has_overlays": s.overlays.exists()} for i, s in enumerate(stills)],
+                    "stills": [still_info(i, s) for i, s in enumerate(stills)],
                     "skipped": skipped,
+                    "studio": studio is not None,
                 }
                 return self._send(200, json.dumps(listing).encode(), "application/json")
+            if parts == ["api", "events"] and studio is not None:
+                return self._stream_events()
+            if len(parts) == 4 and parts[:2] == ["api", "stills"] and parts[3] == "corrections" and studio is not None:
+                still = self._still(parts)
+                if still is None:
+                    return self._send(404, b"Not found")
+                return self._send(200, json.dumps(studio.corrections(still)).encode(), "application/json")
             if len(parts) == 4 and parts[:2] == ["api", "stills"]:
                 still = self._still(parts)
                 files = {"scene": "scene", "background": "background", "figures": "figures", "overlays": "overlays"}
@@ -138,8 +164,70 @@ def make_server(stills: list[Still], skipped: list[str], port: int = DEFAULT_POR
                 return self._send_file(getattr(still, files[parts[3]]))
             self._send(404, b"Not found")
 
+        def _stream_events(self):
+            """Server-sent events: the editor hears about new, processed and
+            fixed stills without reloading."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            subscriber = studio.subscribe()
+            try:
+                while True:
+                    try:
+                        event = subscriber.get(timeout=15)
+                        self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+                    except queue.Empty:
+                        self.wfile.write(b": ping\n\n")  # keeps the connection open
+                    self.wfile.flush()
+            except OSError:
+                pass  # the editor closed the page
+            finally:
+                studio.unsubscribe(subscriber)
+
+        def _capture(self):
+            """A frame from the Chrome extension. Web pages can't send the custom
+            header to another origin, and the Origin must be an extension, so
+            only footsight's extension can drop stills in."""
+            origin = self.headers.get("Origin") or ""
+            if self.headers.get("X-Footsight-Capture") != "1" or not origin.startswith("chrome-extension://"):
+                return self._send(403, b"Captures come from the footsight Chrome extension")
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > MAX_EXPORT_BYTES:
+                return self._send(413, b"Too large")
+            body = self.rfile.read(length)
+            if not body.startswith(PNG_SIGNATURE):
+                return self._send(400, b"A capture must be a PNG")
+            try:
+                meta = json.loads(unquote(self.headers.get("X-Footsight-Meta") or "{}"))
+            except ValueError:
+                meta = {}
+            still = studio.capture(body, meta if isinstance(meta, dict) else {})
+            self._send(200, json.dumps({"id": stills.index(still), "name": still.name}).encode(), "application/json")
+
+        def _correct(self, still):
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > MAX_OVERLAYS_BYTES:
+                return self._send(413, b"Too large")
+            try:
+                data = json.loads(self.rfile.read(length))
+                from footsight.studio import validate_corrections
+                validate_corrections(data)
+            except (ValueError, UnicodeDecodeError) as error:
+                return self._send(400, f"Invalid corrections: {error}".encode())
+            try:
+                fixes = studio.correct(still, data)
+            except Exception as error:  # the re-render failed: keep the previous images
+                return self._send(500, f"Couldn't apply the fix: {error}".encode())
+            self._send(200, json.dumps({"version": still.version, "corrections": fixes}).encode(), "application/json")
+
         def do_POST(self):
             parts = unquote(urlparse(self.path).path).strip("/").split("/")
+            if parts == ["api", "capture"] and studio is not None:
+                return self._capture()
+            if len(parts) == 4 and parts[:2] == ["api", "stills"] and parts[3] == "corrections" and studio is not None:
+                still = self._still(parts)
+                return self._send(404, b"Not found") if still is None else self._correct(still)
             if not (len(parts) == 4 and parts[:2] == ["api", "stills"] and parts[3] in ("overlays", "export")):
                 return self._send(404, b"Not found")
             still = self._still(parts)
@@ -166,9 +254,12 @@ def make_server(stills: list[Still], skipped: list[str], port: int = DEFAULT_POR
             still.overlays.write_text(json.dumps(data, indent=1))
             self._send(200, json.dumps({"saved": still.overlays.name}).encode(), "application/json")
 
+    ThreadingHTTPServer.daemon_threads = True  # open event streams must not block shutdown
     try:
         return ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError:
+        if not fallback_port:
+            raise
         return ThreadingHTTPServer(("127.0.0.1", 0), Handler)  # port taken: any free one
 
 

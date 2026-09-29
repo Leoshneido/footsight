@@ -23,6 +23,15 @@
       <button data-tool="zone" title="Zone (Z) — click the first point to close">Zone <kbd>Z</kbd></button>
       <button data-action="spotlight" title="Spotlight (S)">Spotlight <kbd>S</kbd></button>
     </nav>
+    <div id="fix-tools" hidden>
+      <h3>Fix</h3>
+      <nav>
+        <button data-tool="remove" title="Remove a wrong detection (X)">Remove player <kbd>X</kbd></button>
+        <button data-tool="add" title="Add a missed player (N)">Add player <kbd>N</kbd></button>
+        <button data-tool="ball" title="Place or move the ball; Shift+click removes it (O)">Ball <kbd>O</kbd></button>
+        <button data-tool="side" title="Put a player on the right side (V)">Change side <kbd>V</kbd></button>
+      </nav>
+    </div>
     <h3>Color</h3>
     <nav id="colors">
       <button data-color="yellow" title="Yellow (1)"></button>
@@ -74,6 +83,14 @@
       <g id="tags"></g>
     </svg>
     <input id="tag-input" type="text" maxlength="24" placeholder="Name or number" hidden>
+    <div id="team-chooser" role="dialog" aria-label="Which side?" hidden>
+      <span>Which side?</span>
+      <button data-category="team_a"><i></i>Team A <kbd>1</kbd></button>
+      <button data-category="team_b"><i></i>Team B <kbd>2</kbd></button>
+      <button data-category="goalkeeper"><i></i>Goalkeeper <kbd>3</kbd></button>
+      <button data-category="referee"><i></i>Referee <kbd>4</kbd></button>
+    </div>
+    <div id="stage-status" hidden></div>
   </main>
 
   <div id="notice" role="status" aria-live="polite"></div>
@@ -93,6 +110,8 @@
       <dt>C</dt><dd>Clear this still</dd>
       <dt>Esc</dt><dd>Cancel the shape in progress</dd>
       <dt>← / →</dt><dd>Previous / next still</dd>
+      <dt>X / N / O</dt><dd>Studio fixes: remove a player, add a missed player, place/move the ball (Shift+click removes it)</dd>
+      <dt>V</dt><dd>Studio fix: put a player on the right side (team, keeper or referee)</dd>
       <dt>F</dt><dd>Full screen</dd>
       <dt>B</dt><dd>Hide / show the toolbar</dd>
       <dt>E / ⌘S</dt><dd>Export PNG / save overlays</dd>

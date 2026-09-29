@@ -308,3 +308,68 @@ def test_team_kit_colors_gives_up_when_a_team_has_no_players(tmp_path):
     _make_test_image(image_path, _draw_kit(boxes, (245, 130, 30), (240, 240, 240)))
 
     assert team_kit_colors(str(image_path), boxes, [TEAM_A_LABEL]) == {}
+
+
+def test_a_red_kit_straddling_the_hue_wrap_stays_one_team(tmp_path):
+    """Portugal's dark red reads ~175 on some players and ~3 on others --
+    the same color either side of the seam. Seen on the Colombia v Portugal
+    captures: the straight-line trim threw most of Portugal out as
+    officials. Teams are now fitted on the hue circle and only a player far
+    from both teams' colors is trimmed."""
+    image_path = tmp_path / "still.png"
+    # proportions as on the real capture: a tight yellow majority, and only a
+    # couple of red shirts reading on the high side of the seam
+    red_high = [(10.0 + 40 * i, 10.0, 30.0 + 40 * i, 70.0) for i in range(2)]
+    red_low = [(90.0 + 40 * i, 10.0, 110.0 + 40 * i, 70.0) for i in range(4)]
+    yellow = [(10.0 + 40 * i, 200.0, 30.0 + 40 * i, 260.0) for i in range(8)]
+    _make_test_image(
+        image_path,
+        [(b, (220, 0, 20)) for b in red_high]  # hue ~177
+        + [(b, (220, 22, 0)) for b in red_low]  # hue ~3
+        + [(b, (220, 198, 0)) for b in yellow],  # hue ~27
+    )
+
+    labels = classify_players(str(image_path), red_high + red_low + yellow)
+
+    assert OFFICIALS_LABEL not in labels, labels
+    assert len(set(labels[:6])) == 1, f"the red team split apart: {labels}"
+    assert len(set(labels[6:])) == 1 and labels[0] != labels[6]
+
+
+def test_grass_is_measured_on_each_still_not_assumed(tmp_path):
+    """Broadcast pitches differ: grass read hue ~34 (Bayern), ~39 (Colombia v
+    Portugal), ~44 (Barca). With a fixed 40-60 grass band, the yellow-green
+    pitch of the Colombia v Portugal feed leaked into thin, blurred Portugal
+    players and turned their red orange (hue ~20) -- closer to Colombia's
+    yellow. The grass color is now measured beside the players."""
+    image_path = tmp_path / "still.png"
+    image = Image.new("RGB", (600, 300), (116, 127, 51))  # hue ~39 grass
+    draw = ImageDraw.Draw(image)
+    yellow = [(10.0 + 40 * i, 10.0, 30.0 + 40 * i, 70.0) for i in range(5)]
+    red = [(10.0 + 40 * i, 150.0, 30.0 + 40 * i, 210.0) for i in range(4)]
+    thin_red = (400.0, 150.0, 440.0, 210.0)  # 40 px box, 8 px of red: the rest is pitch
+    for box in yellow:
+        draw.rectangle(list(box), fill=(220, 198, 0))  # hue ~27
+    for box in red:
+        draw.rectangle(list(box), fill=(150, 20, 30))  # hue ~177, dark red
+    draw.rectangle([416, 150, 424, 210], fill=(150, 20, 30))
+    image.save(image_path)
+
+    labels = classify_players(str(image_path), yellow + red + [thin_red])
+
+    assert labels[-1] == labels[5], f"the blurred red player joined the wrong team: {labels}"
+    assert labels[0] != labels[5] and OFFICIALS_LABEL not in labels
+
+
+def test_official_kits_reads_each_officials_own_colors(tmp_path):
+    from footsight.team_classification import official_kits
+
+    image_path = tmp_path / "still.png"
+    ref = (100.0, 10.0, 120.0, 70.0)
+    linesman = (200.0, 10.0, 220.0, 70.0)
+    _make_test_image(image_path, _draw_kit([ref], (30, 30, 35), (15, 15, 15)) + _draw_kit([linesman], (240, 60, 150), (15, 15, 15)))
+
+    kits = official_kits(str(image_path), [ref, linesman])
+
+    assert _close(kits[0][0], (30, 30, 35)) and _close(kits[0][1], (15, 15, 15))
+    assert _close(kits[1][0], (240, 60, 150))

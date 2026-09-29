@@ -7,8 +7,11 @@ import {
   arrowHead,
   densify,
   dotsAlong,
+  dropOverlaysFor,
+  imageToStill,
   makeProjector,
   nearFirstPoint,
+  nextCorrections,
   parseOverlays,
   projectPolygon,
   ribbonPolygon,
@@ -22,6 +25,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const COLORS = { yellow: "#FFD60A", cyan: "#00DCFF", white: "#FFFFFF", red: "#FF3B30" };
 const COLOR_KEYS = { 1: "yellow", 2: "cyan", 3: "white", 4: "red" };
 const TOOL_KEYS = { h: "highlight", t: "tag", a: "run", p: "pass", k: "link", l: "line", z: "zone" };
+const FIX_KEYS = { x: "remove", n: "add", o: "ball", v: "side" }; // studio only
+const CHOOSER_KEYS = { 1: "team_a", 2: "team_b", 3: "goalkeeper", 4: "referee" };
 const TOOL_COLORS = { highlight: "yellow", tag: "yellow", run: "white", pass: "yellow", link: "cyan", line: "cyan", zone: "yellow" };
 const FILL_OPACITY = 0.27;
 const TAG_FILL = "#0F1423";
@@ -50,7 +55,10 @@ const layers = { background: $("background"), ground: $("ground"), preview: $("p
 const app = {
   stills: [],
   index: 0,
-  sessions: new Map(), // still id -> { scene, projector, overlays, spotlight, undo, redo }
+  sessions: new Map(), // still id -> { scene, projector, overlays, spotlight, corrections, version, undo, redo }
+  studio: false, // served by footsight studio: fixes, live stills
+  busy: false, // a fix is re-rendering
+  pending: null, // while the side chooser is open: { type: "add", feet } or { type: "side", id }
   tool: "highlight",
   color: null, // null: the tool's default
   drawing: null, // the shape in progress
@@ -319,29 +327,115 @@ function lineEnds(d) {
 
 // ---------- history ----------
 
+// A history entry is the drawings plus the studio fixes, so undo also takes
+// back a removed/added player or a moved ball.
+const snapshot = (s) => ({ overlays: clone(s.overlays), spotlight: s.spotlight, corrections: clone(s.corrections ?? null) });
+
 function commit(change) {
   const s = session();
   if (!s) return;
-  s.undo.push({ overlays: clone(s.overlays), spotlight: s.spotlight });
+  s.undo.push(snapshot(s));
   s.redo = [];
   change(s);
   render();
 }
 
-function undo() {
-  const s = session();
-  if (!s || !s.undo.length) return notice("Nothing to undo", 1200);
-  s.redo.push({ overlays: clone(s.overlays), spotlight: s.spotlight });
-  Object.assign(s, s.undo.pop());
+async function restore(s, state) {
+  const fixChanged = JSON.stringify(state.corrections) !== JSON.stringify(s.corrections ?? null);
+  s.overlays = state.overlays;
+  s.spotlight = state.spotlight;
+  if (fixChanged && state.corrections) await sendCorrections(s, state.corrections);
   render();
 }
 
-function redo() {
+async function undo() {
   const s = session();
-  if (!s || !s.redo.length) return notice("Nothing to redo", 1200);
-  s.undo.push({ overlays: clone(s.overlays), spotlight: s.spotlight });
-  Object.assign(s, s.redo.pop());
-  render();
+  if (!s || app.busy) return;
+  if (!s.undo.length) return notice("Nothing to undo", 1200);
+  s.redo.push(snapshot(s));
+  await restore(s, s.undo.pop());
+}
+
+async function redo() {
+  const s = session();
+  if (!s || app.busy) return;
+  if (!s.redo.length) return notice("Nothing to redo", 1200);
+  s.undo.push(snapshot(s));
+  await restore(s, s.redo.pop());
+}
+
+// ---------- studio fixes ----------
+
+async function applyFix(action) {
+  const s = session();
+  if (!s || app.busy) return;
+  const before = snapshot(s);
+  if (await sendCorrections(s, nextCorrections(s.corrections, action))) {
+    s.undo.push(before);
+    s.redo = [];
+    render();
+  }
+}
+
+// Post the corrections; the studio re-renders the still from its cached
+// analysis (a couple of seconds) and the editor swaps in the new images.
+async function sendCorrections(s, corrections) {
+  const still = app.stills[app.index];
+  app.busy = true;
+  notice("Updating…", 30000);
+  try {
+    const response = await fetch(`/api/stills/${still.id}/corrections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corrections),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const result = await response.json();
+    s.corrections = result.corrections;
+    still.version = result.version;
+    await refreshScene(still, s);
+    notice("Updated", 1000);
+    return true;
+  } catch (error) {
+    notice(`Fix failed: ${error.message}`, 5000);
+    return false;
+  } finally {
+    app.busy = false;
+  }
+}
+
+async function refreshScene(still, s) {
+  const scene = await (await fetch(`/api/stills/${still.id}/scene?v=${still.version}`)).json();
+  s.scene = scene;
+  s.projector = makeProjector(scene);
+  s.version = still.version;
+  s.overlays = dropOverlaysFor(s.overlays, new Set(scene.players.map((p) => p.id)));
+  if (still === app.stills[app.index]) showLayers(still, s);
+}
+
+function showChooser(event, pending) {
+  const s = session();
+  const chooser = $("team-chooser");
+  for (const button of chooser.querySelectorAll("[data-category]")) {
+    const kit = s.scene.kits?.[button.dataset.category];
+    button.querySelector("i").style.background = kit ? `rgb(${kit.shirt.join(",")})` : "#888";
+  }
+  app.pending = pending;
+  chooser.style.left = `${Math.min(window.innerWidth - 210, event.clientX + 12)}px`;
+  chooser.style.top = `${Math.min(window.innerHeight - 200, event.clientY - 20)}px`;
+  chooser.hidden = false;
+}
+
+function hideChooser() {
+  $("team-chooser").hidden = true;
+  app.pending = null;
+}
+
+function chooseSide(category) {
+  const pending = app.pending;
+  hideChooser();
+  if (pending?.type === "add") applyFix({ type: "add", feet: pending.feet, category });
+  if (pending?.type === "side") applyFix({ type: "side", id: pending.id, category });
 }
 
 // ---------- tools ----------
@@ -356,6 +450,7 @@ function setTool(tool) {
 function cancelDrawing() {
   app.drawing = null;
   hideTagInput();
+  hideChooser();
   renderPreview();
 }
 
@@ -380,6 +475,16 @@ function onPointerDown(event) {
   const color = toolColor();
 
   switch (app.tool) {
+    case "remove":
+      if (player === null) return notice("Click the wrong detection to remove it", 1600);
+      return applyFix({ type: "remove", id: player });
+    case "add":
+      return showChooser(event, { type: "add", feet: imageToStill(px, s.scene.scale || 1.5) });
+    case "side":
+      if (player === null) return notice("Click the player whose side is wrong", 1600);
+      return showChooser(event, { type: "side", id: player });
+    case "ball":
+      return applyFix(event.shiftKey ? { type: "ball-none" } : { type: "ball", pixel: imageToStill(px, s.scene.scale || 1.5) });
     case "highlight": {
       if (player === null) return notice("Click a player to highlight", 1400);
       const existing = s.overlays.findIndex((o) => o.type === "ring" && o.player === player);
@@ -516,11 +621,16 @@ $("tag-input").addEventListener("keydown", (event) => {
 
 async function loadStill(index) {
   cancelDrawing();
+  if (!app.stills.length) return;
   app.index = (index + app.stills.length) % app.stills.length;
   const still = app.stills[app.index];
+  updateStillName();
+  if (still.status && still.status !== "ready") return showStatus(still);
+  $("stage-status").hidden = true;
   if (!app.sessions.has(still.id)) {
-    const scene = await (await fetch(`/api/stills/${still.id}/scene`)).json();
-    const s = { scene, projector: makeProjector(scene), overlays: [], spotlight: false, undo: [], redo: [] };
+    const scene = await (await fetch(`/api/stills/${still.id}/scene?v=${still.version}`)).json();
+    const s = { scene, projector: makeProjector(scene), overlays: [], spotlight: false, corrections: null, version: still.version, undo: [], redo: [] };
+    if (app.studio) s.corrections = await (await fetch(`/api/stills/${still.id}/corrections`)).json();
     if (still.has_overlays) {
       try {
         const saved = parseOverlays(await (await fetch(`/api/stills/${still.id}/overlays`)).text());
@@ -532,10 +642,17 @@ async function loadStill(index) {
     }
     app.sessions.set(still.id, s);
   }
-  const { width, height } = session().scene.image;
+  const s = session();
+  if (s.version !== still.version) await refreshScene(still, s);
+  showLayers(still, s);
+  render();
+}
+
+function showLayers(still, s) {
+  const { width, height } = s.scene.image;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   for (const [layer, name] of [[layers.background, "background"], [layers.figures, "figures"]]) {
-    layer.setAttribute("href", `/api/stills/${still.id}/${name}`);
+    layer.setAttribute("href", `/api/stills/${still.id}/${name}?v=${still.version}`);
     layer.setAttribute("width", width);
     layer.setAttribute("height", height);
   }
@@ -543,8 +660,54 @@ async function loadStill(index) {
     node.setAttribute("width", width);
     node.setAttribute("height", height);
   }
-  $("still-name").textContent = `${still.name} · ${app.index + 1}/${app.stills.length}`;
-  render();
+}
+
+// A still that isn't ready yet (or couldn't be processed) shows a message
+// in place of the image; stepping past it with the arrows still works.
+function showStatus(still) {
+  for (const layer of [layers.background, layers.figures]) layer.removeAttribute("href");
+  layers.ground.replaceChildren();
+  layers.tags.replaceChildren();
+  layers.preview.replaceChildren();
+  layers.veil.setAttribute("visibility", "hidden");
+  const box = $("stage-status");
+  box.textContent = still.status === "failed"
+    ? `Still ${still.name.split("_")[0]} couldn't be processed: ${still.error || "unknown error"}`
+    : `Processing still ${still.name.split("_")[0]}… it will appear here when ready`;
+  box.hidden = false;
+}
+
+function updateStillName() {
+  const still = app.stills[app.index];
+  if (!still) return;
+  const state = still.status && still.status !== "ready" ? ` (${still.status})` : "";
+  $("still-name").textContent = `${still.name} · ${app.index + 1}/${app.stills.length}${state}`;
+}
+
+// Live updates from footsight studio: new captures, processing finished,
+// fixes applied (also from another tab).
+function listenForStills() {
+  const events = new EventSource("/api/events");
+  events.onmessage = (message) => {
+    const { still: info } = JSON.parse(message.data);
+    const known = app.stills[info.id];
+    if (!known) {
+      app.stills[info.id] = info;
+      notice(`Captured still ${info.name.split("_")[0]}`, 1500);
+      if (app.stills.length === 1) return loadStill(0);
+      return updateStillName();
+    }
+    const wasReady = known.status === "ready";
+    Object.assign(known, info);
+    if (known !== app.stills[app.index]) return updateStillName();
+    if (!wasReady && info.status === "ready") return loadStill(app.index);
+    if (info.status !== "ready") {
+      updateStillName();
+      return showStatus(known);
+    }
+    const s = session();
+    if (s && !app.busy && s.version !== info.version) refreshScene(known, s).then(render);
+  };
 }
 
 // ---------- export & save ----------
@@ -581,9 +744,10 @@ async function exportPng() {
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(await loadImage(`/api/stills/${id}/background`), 0, 0);
+    const version = app.stills[app.index].version;
+    ctx.drawImage(await loadImage(`/api/stills/${id}/background?v=${version}`), 0, 0);
     ctx.drawImage(await svgLayerImage(layers.ground.outerHTML, width, height), 0, 0);
-    ctx.drawImage(await loadImage(`/api/stills/${id}/figures`), 0, 0);
+    ctx.drawImage(await loadImage(`/api/stills/${id}/figures?v=${version}`), 0, 0);
     if (s.spotlight) ctx.drawImage(await svgLayerImage(layers.veil.outerHTML, width, height), 0, 0);
     // Tags go straight onto the canvas: an SVG drawn as an image can't use the page's fonts.
     for (const overlay of s.overlays.filter((o) => o.type === "tag")) {
@@ -664,6 +828,11 @@ const actions = {
 
 document.addEventListener("keydown", (event) => {
   if (!$("tag-input").hidden) return;
+  if (!$("team-chooser").hidden) {
+    if (CHOOSER_KEYS[event.key]) return chooseSide(CHOOSER_KEYS[event.key]);
+    if (event.key === "Escape") return hideChooser();
+    return;
+  }
   const focused = document.activeElement;
   if ((event.key === "Enter" || event.key === " ") && focused && focused !== document.body) {
     event.preventDefault();
@@ -681,6 +850,7 @@ document.addEventListener("keydown", (event) => {
   }
   if (mod || event.altKey && key !== "alt") return;
   if (TOOL_KEYS[key]) return setTool(TOOL_KEYS[key]);
+  if (FIX_KEYS[key]) return app.studio ? setTool(FIX_KEYS[key]) : notice("Fixes need footsight studio (python -m footsight.studio)", 2500);
   if (COLOR_KEYS[key]) {
     app.color = COLOR_KEYS[key];
     if (app.drawing) app.drawing.color = app.color;
@@ -707,6 +877,7 @@ for (const button of document.querySelectorAll("[data-color]")) {
   });
 }
 for (const button of document.querySelectorAll("[data-action]")) button.addEventListener("click", () => actions[button.dataset.action]());
+for (const button of document.querySelectorAll("[data-category]")) button.addEventListener("click", () => chooseSide(button.dataset.category));
 
 svg.addEventListener("pointerdown", onPointerDown);
 svg.addEventListener("pointermove", onPointerMove);
@@ -738,7 +909,7 @@ try {
 // Clicking a toolbar control must not leave it focused: Enter or Space would
 // then re-trigger it (Enter re-selected the Zone tool and threw the zone
 // away) instead of finishing the shape being drawn.
-for (const control of document.querySelectorAll("#toolbar button, #toolbar input, #toolbar-tab")) {
+for (const control of document.querySelectorAll("#toolbar button, #toolbar input, #toolbar-tab, #team-chooser button")) {
   control.addEventListener("mousedown", (event) => event.preventDefault());
   control.addEventListener("click", () => control.blur());
 }
@@ -749,10 +920,18 @@ async function start() {
   try {
     const listing = await (await fetch("/api/stills")).json();
     app.stills = listing.stills;
+    app.studio = Boolean(listing.studio);
+    $("fix-tools").hidden = !app.studio;
+    if (app.studio) listenForStills();
     if (listing.skipped.length) notice(`Skipped (re-run the pipeline): ${listing.skipped.join(", ")}`, 6000);
-    if (!app.stills.length) return notice("No editable stills — run the pipeline first", 60000);
-    await loadStill(0);
     updateToolbar();
+    if (!app.stills.length) {
+      const box = $("stage-status");
+      box.textContent = app.studio ? "Waiting for captures — press ⌘⇧S on a paused match in Chrome" : "No editable stills — run the pipeline first";
+      box.hidden = false;
+      return;
+    }
+    await loadStill(0);
   } catch (error) {
     notice(`Couldn't start the editor: ${error.message}`, 60000);
   }

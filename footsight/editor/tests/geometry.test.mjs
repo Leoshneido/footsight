@@ -7,9 +7,12 @@ import {
   catmullRom,
   densify,
   dotsAlong,
+  dropOverlaysFor,
+  imageToStill,
   invert3,
   makeProjector,
   nearFirstPoint,
+  nextCorrections,
   parseOverlays,
   projectPolygon,
   ribbonPolygon,
@@ -160,4 +163,48 @@ test("clicking back on a zone's first point closes it", () => {
   assert.equal(nearFirstPoint(P, points, [first[0] + 40, first[1]], 20), false);
   // a zone needs three corners before it can close
   assert.equal(nearFirstPoint(P, points.slice(0, 2), first, 20), false);
+});
+
+test("a click on the camera view maps back to the original still's pixels", () => {
+  assert.deepEqual(imageToStill([450, 300], 1.5), [300, 200]);
+});
+
+test("fixes build the corrections the studio applies", () => {
+  const start = { removed: [], added: [], ball: { mode: "auto" } };
+  const removed = nextCorrections(start, { type: "remove", id: 4 });
+  assert.deepEqual(removed.removed, [4]);
+  assert.deepEqual(start.removed, [], "the previous corrections are left untouched (undo keeps them)");
+  assert.deepEqual(nextCorrections(removed, { type: "remove", id: 4 }).removed, [4]);
+
+  const added = nextCorrections(start, { type: "add", feet: [300, 200], category: "team_b" });
+  assert.deepEqual(added.added, [{ feet: [300, 200], category: "team_b" }]);
+  const withId = { ...start, added: [{ id: 1000, feet: [1, 2], category: "team_a" }] };
+  assert.deepEqual(nextCorrections(withId, { type: "remove", id: 1000 }).added, [], "removing an added player takes it back out");
+
+  assert.deepEqual(nextCorrections(start, { type: "ball", pixel: [5, 6] }).ball, { mode: "set", pixel: [5, 6] });
+  assert.deepEqual(nextCorrections(start, { type: "ball-none" }).ball, { mode: "none" });
+});
+
+test("drawings on a removed player go with them", () => {
+  const overlays = [
+    { type: "ring", player: 4, color: "yellow" },
+    { type: "tag", player: 2, text: "A", color: "yellow" },
+    { type: "link", players: [2, 4, 7], color: "cyan" },
+    { type: "link", players: [4, 7], color: "cyan" },
+    { type: "zone", points_m: [[0, 0], [1, 0], [1, 1]], color: "yellow" },
+  ];
+  const kept = dropOverlaysFor(overlays, new Set([2, 7]));
+  assert.deepEqual(kept, [
+    { type: "tag", player: 2, text: "A", color: "yellow" },
+    { type: "link", players: [2, 7], color: "cyan" },
+    { type: "zone", points_m: [[0, 0], [1, 0], [1, 1]], color: "yellow" },
+  ]);
+});
+
+test("changing a player's side is a fix too", () => {
+  const start = { removed: [], added: [{ id: 1000, feet: [1, 2], category: "team_a" }], ball: { mode: "auto" }, sides: {} };
+  assert.deepEqual(nextCorrections(start, { type: "side", id: 20, category: "team_b" }).sides, { 20: "team_b" });
+  const moved = nextCorrections(start, { type: "side", id: 1000, category: "team_b" });
+  assert.equal(moved.added[0].category, "team_b", "an added player just changes category");
+  assert.deepEqual(moved.sides, {});
 });

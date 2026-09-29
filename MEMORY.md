@@ -239,6 +239,71 @@ The next feature is overlay tools for analyzing the stills.
 **What was rejected:** Dashes for the pass (the user chose dots). A hidden toolbar with no way back (hence B plus the ☰ tab).
 **Verification:** 137 pytest tests and 17 node tests pass; the new geometry helpers `dotsAlong` and `nearFirstPoint` were written test-first. A headless Chrome screenshot shows the right-hand panel and the dotted pass. The user then checked closing a zone by clicking, the B toggle, the hide box and the tab live: all work.
 
+## 2026-09-27, Chrome capture extension: spike says the video method works on the user's site
+**What was decided:** The next feature is a Chrome extension that captures stills from the website the user watches matches on. Paid services such as Paramount+ stay manual (the user's choice). A throwaway test extension (Manifest V3, scratchpad only) tried two methods: drawing the page's `<video>` frame to a canvas ("video"), and falling back to a tab screenshot cropped to the player. On the user's site the **video method works and saved a full-resolution still**.
+**Why:** DRM-protected streams usually return black frames, so capture had to be proven on the actual site before any design. The video method gives the video's native resolution, not the on-screen size.
+**What was rejected:** Anything that bypasses DRM or copy protection (never in scope). Building the extension before knowing whether the site allows capture.
+**Note:** Some streaming services' terms of use may restrict frame capture. This is general understanding, not legal advice; the user was told.
+
+## 2026-09-28, Capture studio + Chrome extension built
+**What was decided:** Built per the spec and plan (`docs/superpowers/specs/2026-09-28-capture-studio-design.md`, `docs/superpowers/plans/2026-09-28-capture-studio.md`), straight through at the user's request.
+- `extension/`: ⌘⇧S sends the full-resolution video frame to `python -m footsight.studio`.
+- The studio processes each still automatically, with no pop-ups, and it appears live in the editor.
+- New editor fix tools: X removes a detection, N adds a missed player (click the feet, pick the side), O places, moves or removes the ball. Each is redone from a cached analysis in about 4 s, and undoable.
+- The pipeline split into `analyze` (slow, cached, stable detection ids) and `render_still` (fast, applies corrections); `run()` keeps its behavior.
+**Why:** The user's chat choices: send straight to footsight; process automatically and fix in the editor; ⌘⇧S; an add-player tool for players missed in overlaps.
+**What was rejected:** A watched folder and Chrome native messaging for handoff. Pop-up review windows in this flow (they're kept for the standalone `pipeline` command). Anything that bypasses DRM.
+**Issues found and fixed during the build:**
+- Naming the fast step `render` clashed with the `render` module the pipeline uses (renamed `render_still`).
+- An added player's box size was a numpy float, which crashed Pillow's blur. Both the box and `draw_player_icon` now use plain floats, with a regression test.
+- The corrections endpoint reported that render crash as "Invalid corrections". Validation (400) is now separate from render failures (500), with a test.
+**Verification:**
+- 157 pytest and 26 node tests pass.
+- Real run on real models: the 4 stills posted as extension captures (extension headers, `chrome-extension://` origin, accented title) were all ready in 68 s.
+- Removing the 12.00.14 watermark (detection 23) took about 4 s, and adding a player on Bayern (id 1000, red kit) took about 4 s.
+- Reopening the session brought all 4 back ready without reprocessing, with fixes remembered.
+- A headless screenshot shows the Fix tools and the added player.
+**Open:**
+- On Bayern, every visible player was detected; the user confirmed the app handles that still correctly (nothing was missing after all).
+- Not checked by hand yet: loading the extension and ⌘⇧S on the user's site; the tools with the mouse.
+- Claude Code's automatic safety check failed intermittently during this build (no verdict). Retries or file-editing tools got around it.
+
+## 2026-09-28, Team split rebuilt on the hue circle with per-still grass; Change side fix; one figure style
+**What was decided:**
+- (1) `classify_players` fits two teams by circular k-means on circular jersey hues. A player further than 40 hue units from their team's color is set aside as officials, refitting until stable; a one-member cluster is a stray. The straight-line Tukey fence was removed.
+- (2) The grass hue is measured per still, as the circular median of saturated pixels beside the players. Pixels within 6 units of it are dropped from jersey samples and kit colors. This replaces the fixed 40-60 band.
+- (3) A V "Change side" fix: corrections `sides: {id: category}` override the detector's role and the color split. For added players it edits their category.
+- (4) Every camera-view player without a usable pose (tangled or added) is drawn by the posed-figure renderer with a standing pose. Its proportions are the medians of 106 real poses (nose 11.5%, hips 49%, ankles 87% down the box), replacing the old icon.
+**Why:** On the user's first real captures (Colombia v Portugal, from their site):
+- Portugal's red reads 173-179 or 0-11, either side of the seam. With Colombia's tight yellow majority the straight-line fence threw up to 8 Portugal players out as officials.
+- The pitch there is hue ~38, below the fixed 40-60 grass band, so blurred red players leaked grass and read orange (~20), which put them with Colombia.
+- The detector also labelled one Portugal player "referee", which no color fix can reach, hence the V tool.
+- Added players drew about 25% taller and broader than their neighbours: the icon was 105% of the box, while posed figures span face to ankles, about 85%.
+**What was rejected:**
+- A circular Tukey fence (Barca's wide circular spread let the referee through; logged in ERRORS on 2026-09-27).
+- Just shrinking the icon (the style would still differ).
+- Hue histograms (tried before, and they trimmed real players).
+**Verification:**
+- 162 pytest and 27 node tests pass.
+- New tests: red either side of the seam (built to the real proportions: a tight yellow majority and 2 high-side reds, which failed before); per-still grass on a yellow-green pitch; sides in pipeline, studio and editor; standing-pose proportions.
+- On all 10 real stills:
+  - COL-POR has no wrongly set-aside players on any capture, and capture 4 now splits 9-9 with the blurred reds in the red team;
+  - Bayern stays 5/7;
+  - the Barça referee and watermark are still set aside;
+  - COL-POR capture 6 sets one blue player (hue 124) aside, plausibly an official.
+- The user's 6 captures were re-rendered in their session; a test added player now matches its neighbours.
+
+## 2026-09-28, Officials drawn in the kit they actually wear
+**What was decided:** Referees and assistants are drawn, in both images, in their own shirt and shorts colors read off the still per person (`official_kits`). They fall back to a neutral charcoal (`NEUTRAL_OFFICIAL_KIT`) when hand-added (no reliable pixels) or when their kit is within 60 RGB of either team's shirt. The fixed yellow `REFEREE_COLOR` is no longer used for officials in the pipeline.
+**Why:** The user thought the referee wasn't being recognized, because on the Colombia v Portugal captures he looked like a Colombian. Recognition was fine: the detector found the referee (black kit, about RGB 33,41,30) and the linesman. But every official was drawn in one fixed yellow (255,215,0), almost Colombia's drawn yellow (202,179,0).
+**What was rejected:** A user-picked referee color per session (offered, then dropped once the cause was clear; the user wanted the tool to handle it). Changing goalkeepers too (they keep their fixed green -- the user chose to keep the keeper as is for now).
+**Verification:**
+- 166 pytest tests pass.
+- New tests: own kit used in both images; neutral kit when dressed like a team; `official_kits` reads each person; `render_pitch` player_kits.
+- Six existing pipeline tests were updated for the extra `player_kits` argument and a stubbed kit reader.
+- On the user's session (all 6 re-rendered): the referee is drawn black and distinct. Player 20 (a Portugal player the detector calls "referee") comes out neutral; the V fix puts him right.
+- **Known nit:** the linesman at the frame edge reads olive shorts (grass or legs in the shorts band).
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.
