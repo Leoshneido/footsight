@@ -393,3 +393,38 @@ The next feature is overlay tools for analyzing the stills.
 - The user will pick the next idea.
 - Candidates already captured: measurements in the editor; the video-freeze UI (the original goal, grabbing stills from footage), which could build on the editor's local web app.
 - `out/match/` holds the 4 test stills with editor layers. It's git-ignored; regenerate with the pipeline if needed.
+
+## Session Summary, 2026-09-28 (capture studio, Chrome extension, first real captures)
+**Worked on:** Getting stills straight from the user's match website into footsight, then fixing what the first real captures exposed.
+**Completed:**
+- *Housekeeping:* the PnLCalib submodule ignores untracked files (its Python caches), so `git status` is clean.
+- *Chrome extension (spike, then build):* the test extension proved the user's site allows reading the `<video>` frame at full resolution. `extension/` captures with ⌘⇧S and sends to the studio, falling back to Downloads when the studio isn't running.
+- *Capture studio (spec, plan, build):* `python -m footsight.studio [--session NAME | --open DIR]` loads the models once, processes captures in the background, and pushes them live to the editor.
+  - The pipeline split into a cached `analyze` and a fast `render_still`, with corrections.
+  - Editor fixes: X remove, N add, O ball, V change side. They're undoable and redone in about 4 s.
+- *Fixes from the user's first real captures (Colombia v Portugal):*
+  - team split on the hue circle with the grass hue measured per still;
+  - a standing pose for players without a usable pose, in the same drawn style;
+  - officials drawn in the kit they actually wear, neutral charcoal if it looks like a team's;
+  - arrows start where clicked;
+  - editor players looked up by id.
+- *Hand checks by the user:* the studio and extension end to end on their site (6 captures), and the fix tools.
+- *Commits:* 3 on `main` (efb751e, f9bcf97, 75a0da6), none pushed. 166 pytest and 29 node tests pass.
+**In progress:** Nothing. Everything is committed.
+**Decisions made:** See the 2026-09-28 entries above. Key ones:
+- captures go straight to a running studio, with automatic processing and fixes made in the editor;
+- ⌘⇧S;
+- added players are sized from the player-height scale and drawn standing;
+- the user's side choice (V) beats the detector and the color split;
+- officials are drawn in their real kit;
+- goalkeepers stay fixed green (the user's choice);
+- nothing bypasses DRM, and paid services stay manual.
+**Parked by the user:**
+- goalkeepers in their real kit;
+- crowd team colors;
+- the near-side corner sliver;
+- tangled players' own poses;
+- measurements in the editor;
+- a select-and-move tool.
+**Known nits:** the linesman at the frame edge reads olive shorts. Claude Code's automatic safety check failed intermittently during the build (retries or file-editing tools got around it).
+**Next session:** The user picks the next idea. The studio session `captures/2026-09-28 22-07 test/` (6 Colombia v Portugal captures) is git-ignored test material. Reopen it with `python -m footsight.studio --open "captures/2026-09-28 22-07 test"`.
