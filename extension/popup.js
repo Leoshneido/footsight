@@ -64,7 +64,7 @@ function renderError(text) {
   view.replaceChildren(button("Try again", () => { showMessage(""); refresh(); }));
 }
 
-async function renderOff() {
+async function renderOff(current = null) {
   const [{ projects = [], last_location: lastLocation } = {}, stored] = await Promise.all([
     host({ cmd: "recent" }).catch(() => ({})),
     chrome.storage.session.get(["pendingFrame", "lastError"]),
@@ -79,15 +79,23 @@ async function renderOff() {
   const name = el("input", { type: "text", value: defaultProjectName(new Date()), placeholder: "Project name" });
   const start = (choose) => startProject({ name: name.value, choose, location: choose ? undefined : lastLocation });
   const children = [el("h2", { textContent: "New project" }), name];
+  if (current) {
+    // switching from the running view: starting or reopening stops the current project
+    children.unshift(
+      button("← Back", refresh),
+      el("p", { className: "muted", textContent: `Starting another project stops “${current.name}”.` }),
+    );
+  }
   if (lastLocation) {
     const folder = lastLocation.split("/").filter(Boolean).pop() || lastLocation;
     children.push(Object.assign(button(`Start in ${folder}`, () => start(false), "primary"), { title: lastLocation }));
   }
   children.push(button("Choose location & start…", () => start(true), lastLocation ? "" : "primary"));
 
-  if (projects.length) {
+  const others = current ? projects.filter((p) => p.path !== current.path) : projects;
+  if (others.length) {
     children.push(el("h2", { textContent: "Recent" }));
-    children.push(el("ul", {}, ...projects.map((p) => el("li", { title: p.path },
+    children.push(el("ul", {}, ...others.map((p) => el("li", { title: p.path },
       el("span", { className: "name", textContent: p.name }),
       el("span", { className: "count", textContent: `${p.stills} still${p.stills === 1 ? "" : "s"}` }),
       button("Reopen", () => openProject(p.path)),
@@ -115,6 +123,7 @@ function renderRunning(reply) {
     el("div", { className: "counts" }, ...(parts.length ? parts : [el("span", { textContent: "No stills yet — press ⌘⇧S on a video" })])),
     button("Open editor", async () => { await chrome.runtime.sendMessage({ type: "open-editor" }); window.close(); }, "primary"),
     button("Capture now", async () => { await chrome.runtime.sendMessage({ type: "capture-active" }); window.close(); }),
+    button("Switch project…", () => { clearTimeout(pollTimer); renderOff(reply.project); }),
     button("Stop footsight", async () => { await host({ cmd: "stop" }); showMessage(""); refresh(); }, "danger"),
   );
   pollTimer = setTimeout(refresh, 3000); // keep the counts current
