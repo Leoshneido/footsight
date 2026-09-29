@@ -106,7 +106,7 @@ striped teams spread widely on the circle.
 
 ## Brand assets
 
-- Logo: `scripts/make_logo.py` -> `assets/logo/` (`footsight_logo.png` transparent, `footsight_logo_board.png` on navy, `footsight_ball.png`). "FOOTSiGHT", Kanit Black Italic (SIL OFL 1.1, read from `~/Library/Fonts`, not vendored), football at the font's own i-dot position, 1.875x the dot.
+- Logo: `scripts/make_logo.py` -> `assets/logo/` (`footsight_logo.png` transparent, `footsight_logo_board.png` on navy, `footsight_ball.png`). It also writes the extension icons `extension/icons/icon{16,32,48,128}.png` (`make_icon`: the logo's i + ball dot on a rounded navy tile). "FOOTSiGHT", Kanit Black Italic (SIL OFL 1.1, read from `~/Library/Fonts`, not vendored), football at the font's own i-dot position, 1.875x the dot.
 - Mockups must not reuse broadcast pixels (copyright, see MEMORY.md 2026-09-27): anything outside the pitch is drawn, not filtered from the still.
 
 ## Working conventions

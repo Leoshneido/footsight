@@ -461,3 +461,8 @@ The next feature is overlay tools for analyzing the stills.
 **In progress:** The user's hand check in Chrome (reload the extension; Choose location & start; ⌘⇧S; Stop, then ⌘⇧S auto-start; Reopen; Switch project).
 **Decisions made:** See the three 2026-09-29 entries above.
 **Next session:** Hear back on the Chrome checklist and fix anything it exposes. If the popup shows the setup screen, check the extension id matches. If footsight won't start, read `footsight.log` in the project folder. After that, the parked ideas: goalkeepers' real kit, measurements, select-and-move.
+
+## 2026-09-29, Extension icon: the logo's i with the football dot
+**What was decided:** The toolbar icon is the logo's "i" with its football dot (drawn exactly as in the logo), white on a rounded navy tile (the board color). `scripts/make_logo.py` generates `extension/icons/icon{16,32,48,128}.png`.
+**Why:** The user picked the most on-brand of three sketches.
+**What was rejected:** The football alone (generic), the football on a navy tile (readable but less on-brand).

@@ -10,7 +10,10 @@ Kanit is SIL Open Font License 1.1 (Copyright 2020 The Kanit Project
 Authors); logos made with it carry no font-license restriction. The font
 file is read from the user's font folder rather than copied into the repo.
 
-    python scripts/make_logo.py [--font PATH] [--out-dir assets/logo]
+It also writes the Chrome extension's toolbar icons: the logo's "i" with its
+football dot, on the navy board color.
+
+    python scripts/make_logo.py [--font PATH] [--out-dir assets/logo] [--icon-dir extension/icons]
 """
 import argparse
 import itertools
@@ -23,6 +26,8 @@ from scipy.spatial import ConvexHull
 
 DEFAULT_FONT = Path.home() / "Library" / "Fonts" / "Kanit-BlackItalic.ttf"
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "assets" / "logo"
+DEFAULT_ICON_DIR = Path(__file__).resolve().parent.parent / "extension" / "icons"
+ICON_SIZES = (16, 32, 48, 128)
 
 WORD = ("FOOTS", "i", "GHT")
 TEXT_COLOR = (255, 255, 255)
@@ -163,6 +168,30 @@ def make_logo(font_path: Path, cap_height_px: int) -> Image.Image:
     return layer.crop(layer.getbbox())
 
 
+def make_icon(font_path: Path, size: int) -> Image.Image:
+    """The extension icon: the logo's i and football dot, drawn exactly as in
+    the logo, centered on a rounded navy tile."""
+    big = 1024
+    font = ImageFont.truetype(str(font_path), big)
+    layer = Image.new("RGBA", (big * 3, big * 3), (0, 0, 0, 0))
+    x, baseline = big * 1.0, big * 2.5
+    ImageDraw.Draw(layer).text((x, baseline), "ı", font=font, fill=TEXT_COLOR, anchor="ls")
+    dot_dx, dot_dy, dot_height = _native_dot(font, big)
+    diameter = int(round(dot_height * BALL_SCALE))
+    ball = draw_ball(diameter)
+    dot_bottom = baseline + dot_dy + dot_height / 2
+    layer.paste(ball, (int(round(x + dot_dx - diameter / 2)), int(round(dot_bottom - diameter))), ball)
+    mark = layer.crop(layer.getbbox())
+
+    tile_px = size * SUPERSAMPLE
+    tile = Image.new("RGBA", (tile_px, tile_px), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).rounded_rectangle((0, 0, tile_px - 1, tile_px - 1), radius=int(tile_px * 0.22), fill=BOARD_COLOR + (255,))
+    scale = tile_px * 0.78 / max(mark.size)
+    mark = mark.resize((max(1, int(mark.width * scale)), max(1, int(mark.height * scale))), Image.LANCZOS)
+    tile.alpha_composite(mark, ((tile_px - mark.width) // 2, (tile_px - mark.height) // 2))
+    return tile.resize((size, size), Image.LANCZOS)
+
+
 def on_board(logo: Image.Image, padding_ratio: float = 0.25) -> Image.Image:
     pad_x, pad_y = int(logo.width * padding_ratio / 4), int(logo.height * padding_ratio)
     board = Image.new("RGB", (logo.width + 2 * pad_x, logo.height + 2 * pad_y), BOARD_COLOR)
@@ -174,6 +203,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--font", type=Path, default=DEFAULT_FONT)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
+    parser.add_argument("--icon-dir", type=Path, default=DEFAULT_ICON_DIR)
     parser.add_argument("--cap-height", type=int, default=400, help="Height of the capitals in pixels")
     args = parser.parse_args()
 
@@ -183,6 +213,10 @@ def main() -> None:
     on_board(logo).save(args.out_dir / "footsight_logo_board.png")
     draw_ball(512).save(args.out_dir / "footsight_ball.png")
     print(f"Wrote logo files to {args.out_dir}")
+    args.icon_dir.mkdir(parents=True, exist_ok=True)
+    for size in ICON_SIZES:
+        make_icon(args.font, size).save(args.icon_dir / f"icon{size}.png")
+    print(f"Wrote extension icons to {args.icon_dir}")
 
 
 if __name__ == "__main__":
