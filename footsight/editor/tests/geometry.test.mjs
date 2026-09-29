@@ -13,6 +13,8 @@ import {
   makeProjector,
   nearFirstPoint,
   nextCorrections,
+  playerById,
+  playerUnderClick,
   parseOverlays,
   projectPolygon,
   ribbonPolygon,
@@ -207,4 +209,25 @@ test("changing a player's side is a fix too", () => {
   const moved = nextCorrections(start, { type: "side", id: 1000, category: "team_b" });
   assert.equal(moved.added[0].category, "team_b", "an added player just changes category");
   assert.deepEqual(moved.sides, {});
+});
+
+test("an arrow only starts from a player when the click is on their body", () => {
+  // The generous 3 m snap (for highlight/tag/link) reached up to ~170 px from
+  // a player's feet on real captures, so runs started near a player jumped
+  // to their feet. Arrows only snap when the click lands on the player.
+  const [x, y] = SCENE.players[1].feet;
+  assert.equal(playerUnderClick(SCENE, [x, y - 30]), 1);
+  const nearby = P.toImage([12, 6]); // ~2.2 m from player 1's feet, outside the box
+  assert.equal(snapPlayer(SCENE, P, nearby), 1, "the generous snap still finds them");
+  assert.equal(playerUnderClick(SCENE, nearby), null);
+});
+
+test("players are found by their id, not their position in the list", () => {
+  // Studio scenes keep each detection's id: removed players leave gaps and
+  // added ones are 1000+. Looking players up by list position put rings,
+  // tags and arrow starts on the wrong player after any fix.
+  const scene = { players: [{ id: 4, feet_m: [1, 1] }, { id: 7, feet_m: [2, 2] }, { id: 1000, feet_m: [3, 3] }] };
+  assert.deepEqual(playerById(scene, 7).feet_m, [2, 2]);
+  assert.deepEqual(playerById(scene, 1000).feet_m, [3, 3]);
+  assert.equal(playerById(scene, 1), undefined);
 });

@@ -50,8 +50,8 @@ const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 // camera if boxes overlap), else the closest whose feet are within maxMeters
 // of the clicked spot on the pitch.
 export function snapPlayer(scene, projector, px, maxMeters = 3) {
-  const inside = scene.players.filter(({ box: [x1, y1, x2, y2] }) => px[0] >= x1 && px[0] <= x2 && px[1] >= y1 && px[1] <= y2);
-  if (inside.length) return inside.reduce((a, b) => (b.feet[1] > a.feet[1] ? b : a)).id;
+  const onBody = playerUnderClick(scene, px);
+  if (onBody !== null) return onBody;
   const spot = projector.toPitch(px);
   if (!spot) return null;
   let best = null;
@@ -60,6 +60,21 @@ export function snapPlayer(scene, projector, px, maxMeters = 3) {
     if (d <= maxMeters && (!best || d < best.d)) best = { id: player.id, d };
   }
   return best ? best.id : null;
+}
+
+// Players are identified by id: studio scenes keep each detection's id
+// (removed players leave gaps, added ones are 1000+), so never index the
+// players list by id.
+export function playerById(scene, id) {
+  return scene.players.find((p) => p.id === id);
+}
+
+// The player whose body (detection box) the click is on -- the one nearest
+// the camera if boxes overlap -- or null. Arrows use this strict version:
+// they often start from a spot near a player, not from the player.
+export function playerUnderClick(scene, px) {
+  const inside = scene.players.filter(({ box: [x1, y1, x2, y2] }) => px[0] >= x1 && px[0] <= x2 && px[1] >= y1 && px[1] <= y2);
+  return inside.length ? inside.reduce((a, b) => (b.feet[1] > a.feet[1] ? b : a)).id : null;
 }
 
 export function ringPolygon(center, radius = 1.3, n = 48) {

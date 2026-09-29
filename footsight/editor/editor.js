@@ -12,6 +12,8 @@ import {
   makeProjector,
   nearFirstPoint,
   nextCorrections,
+  playerById,
+  playerUnderClick,
   parseOverlays,
   projectPolygon,
   ribbonPolygon,
@@ -152,7 +154,7 @@ function ribbonShape(P, path, width, color, opacity = 1) {
 
 function groundShapes(overlay, scene, P) {
   const color = colorOf(overlay);
-  const feet = (id) => scene.players[id]?.feet_m;
+  const feet = (id) => playerById(scene, id)?.feet_m;
   const shapes = [];
   switch (overlay.type) {
     case "ring": {
@@ -209,7 +211,7 @@ function groundShapes(overlay, scene, P) {
 
 // Tags float above the player's head at a fixed size on screen.
 function tagLayout(overlay, scene, measure) {
-  const player = scene.players[overlay.player];
+  const player = playerById(scene, overlay.player);
   if (!player) return null;
   const size = Math.round(scene.image.height * 0.02);
   const width = measure(overlay.text, size) + size * 1.1;
@@ -257,9 +259,9 @@ function render() {
 
 function spotlightHoles(s) {
   return s.overlays
-    .filter((o) => o.type === "ring" && s.scene.players[o.player])
+    .filter((o) => o.type === "ring" && playerById(s.scene, o.player))
     .map((o) => {
-      const [x1, y1, x2, y2] = s.scene.players[o.player].box;
+      const [x1, y1, x2, y2] = playerById(s.scene, o.player).box;
       const h = y2 - y1;
       return { cx: (x1 + x2) / 2, cy: y2 - h * 0.45, rx: Math.max((x2 - x1) * 0.95, h * 0.55), ry: h * 0.8 };
     });
@@ -497,14 +499,17 @@ function onPointerDown(event) {
     }
     case "run": {
       if (!m) return;
-      const start = player !== null ? s.scene.players[player].feet_m : m;
+      // start exactly where clicked, unless the click is on a player's body
+      const onPlayer = playerUnderClick(s.scene, px);
+      const start = onPlayer !== null ? playerById(s.scene, onPlayer).feet_m : m;
       app.drawing = { type: "run", points: [start], color };
       svg.setPointerCapture(event.pointerId);
       return;
     }
     case "pass": {
       if (!m) return;
-      const start = player !== null ? s.scene.players[player].feet_m : m;
+      const onPlayer = playerUnderClick(s.scene, px);
+      const start = onPlayer !== null ? playerById(s.scene, onPlayer).feet_m : m;
       app.drawing = { type: "pass", start, end: null, color };
       svg.setPointerCapture(event.pointerId);
       return;
@@ -583,7 +588,7 @@ function onPointerUp(event) {
 function showTagInput(player, color) {
   const s = session();
   const input = $("tag-input");
-  const [x1, y1, x2] = s.scene.players[player].box;
+  const [x1, y1, x2] = playerById(s.scene, player).box;
   const [cx, cy] = toClientPoint([(x1 + x2) / 2, y1]);
   const existing = s.overlays.find((o) => o.type === "tag" && o.player === player);
   input.value = existing ? existing.text : "";

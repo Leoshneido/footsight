@@ -304,6 +304,14 @@ The next feature is overlay tools for analyzing the stills.
 - On the user's session (all 6 re-rendered): the referee is drawn black and distinct. Player 20 (a Portugal player the detector calls "referee") comes out neutral; the V fix puts him right.
 - **Known nit:** the linesman at the frame edge reads olive shorts (grass or legs in the shorts band).
 
+## 2026-09-28, Bug fix: arrows jumped away from the click (two causes)
+**What was decided:** Run and pass arrows start exactly where the user clicks, snapping to a player's feet only when the click is on that player's body (`playerUnderClick`). All editor player lookups go by id (`playerById`) instead of list position.
+**Why:** The user reported that the run arrow "sometimes does not start where I click". Traced with the systematic-debugging process; the start point is set in exactly one place, so there were two causes:
+- (1) Arrows used the generous 3 m snap meant for highlight, tag and link. On a real capture that reaches 94-174 px from a player's feet (more than a body height) and covers 23% of the visible pitch, so a run started near anyone jumped to their feet.
+- (2) A latent bug from the studio build: the editor did `scene.players[id]`, but studio scenes keep stable ids (removed players leave gaps, added ones are 1000+). On the user's capture 001, after removing players 8 and 10, clicking player 19 started the arrow at player 21's feet (x 1818 instead of 776). Rings, links, tags, the spotlight cut-outs and the tag input used the same wrong lookup.
+**What was rejected:** Never snapping arrows (the user chose snap-on-the-body). Shrinking the 3 m radius for every tool (highlight, tag and link benefit from it).
+**Verification:** 29 node tests pass. New tests: arrow snap only on the body; lookup by id on a scene whose ids don't match positions. The real capture confirmed the old lookup picked the wrong players. Editor-only change: a browser reload picks it up, no studio restart needed.
+
 ## Session Summary, 2026-09-10 (afternoon/evening)
 **Worked on:** Picking up the two "parked" hardening items from the earlier calibration-feasibility session, then the accepted ~91%-accuracy team-classification limitation.
 **Completed:** Discovered both parked items (horizon guard, subprocess error surfacing) were already fixed in an earlier commit (`c2604b9`) and the caveat noting them as open was just stale — corrected in MEMORY.md, no code change needed. Fixed the team-classification accuracy issue in two rounds: round 1 (cluster on hue+saturation instead of raw BGR) verified clean on the original Barça/Feyenoord still (22/22 correct, up from 20/22); round 2 (drop saturation, hue-only) was needed after a second real still (Bayern vs. Bodø/Glimt, user-added mid-session) revealed round 1 broke down on close-hued kits (red vs. yellow) — hue-only fixed that specific problem, confirmed by a regression test built to fail pre-fix and pass post-fix.
